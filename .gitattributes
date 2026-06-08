@@ -1,0 +1,13 @@
+# Exclude from git archive / Packagist dist (production install stays lean)
+/tests                      export-ignore
+/stubs                      export-ignore
+/coverage                   export-ignore
+/build                      export-ignore
+/.phpunit.cache             export-ignore
+/.phpunit.result.cache      export-ignore
+phpunit.xml                 export-ignore
+phpstan.neon                export-ignore
+.github                     export-ignore
+.gitignore                  export-ignore
+.gitattributes              export-ignore
+RELEASE_NOTES.md            export-ignore

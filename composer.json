@@ -1,0 +1,73 @@
+{
+    "name": "gemvc/cli-dev",
+    "description": "GEMVC development CLI: codegen, admin tools, database introspection. Internal ecosystem package — install with --dev only.",
+    "type": "library",
+    "license": "MIT",
+    "version": "1.0.0",
+    "archive": {
+        "exclude": [
+            "/tests",
+            "/stubs",
+            "/coverage",
+            "/build",
+            "/.phpunit.cache",
+            "/.phpunit.result.cache",
+            "/phpunit.xml",
+            "/phpstan.neon",
+            "/.github",
+            "/.gitignore",
+            "/.gitattributes",
+            "/RELEASE_NOTES.md"
+        ]
+    },
+    "homepage": "https://github.com/gemvc/cli-dev",
+    "keywords": ["gemvc", "cli", "development", "codegen"],
+    "authors": [
+        {
+            "name": "Ali Khorsandfard",
+            "email": "ali.khorsandfard@gmail.com"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/gemvc/cli-dev/issues",
+        "source": "https://github.com/gemvc/cli-dev"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/gemvc/cli-dev.git"
+    },
+    "require": {
+        "php": "^8.2",
+        "gemvc/cli-base": "^1.0.1"
+    },
+    "require-dev": {
+        "phpstan/phpstan": "^2.1",
+        "phpunit/phpunit": "^10.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "Gemvc\\CLI\\": "src/",
+            "Gemvc\\CLI\\Commands\\": "src/Commands/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Gemvc\\CliDev\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "1.0.x-dev"
+        },
+        "gemvc": {
+            "cli-package": "dev",
+            "cli-commands": "src/Commands"
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "scripts": {
+        "test": "phpunit",
+        "phpstan": "phpstan analyse -c phpstan.neon --memory-limit=256M"
+    }
+}
