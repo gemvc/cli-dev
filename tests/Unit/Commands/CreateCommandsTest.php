@@ -88,15 +88,20 @@ final class CreateCommandsTest extends CommandTestCase
     {
         $command = new class(['Blog'], []) extends CreateCrud {
             use \Gemvc\CliDev\Tests\Support\SuppressesCliExit;
-
-            protected function newCreateService(array $args, array $options): CreateService
-            {
-                return new \Gemvc\CliDev\Tests\Support\Commands\TestableCreateService($args, $options);
-            }
         };
         $this->assertTrue($command->execute());
         $this->assertFileExists($this->projectRoot . '/app/api/Blog.php');
         $this->assertFileExists($this->projectRoot . '/app/controller/BlogController.php');
+    }
+
+    public function testRunCrudGenerationUsesDefaultServiceFactory(): void
+    {
+        $command = new class(['Blog'], []) extends CreateCrud {
+            use \Gemvc\CliDev\Tests\Support\SuppressesCliExit;
+        };
+
+        $this->assertTrue($this->invokeMethod($command, 'runCrudGeneration'));
+        $this->assertFileExists($this->projectRoot . '/app/api/Blog.php');
     }
 
     public function testCreateServiceFormatsName(): void

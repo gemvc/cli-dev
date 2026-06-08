@@ -106,4 +106,45 @@ final class AdminSetpasswordTest extends CommandTestCase
             chmod($path, 0644);
         }
     }
+
+    public function testReadEnvContentReturnsFileContents(): void
+    {
+        $path = $this->projectRoot . '/.env';
+        file_put_contents($path, "APP_ENV=dev\n");
+        $command = $this->makeCommand(AdminSetpassword::class, [], []);
+
+        $this->assertSame("APP_ENV=dev\n", $this->invokeMethod($command, 'readEnvContent', [$path]));
+    }
+
+    public function testReadEnvContentReturnsNullForMissingFile(): void
+    {
+        $command = $this->makeCommand(AdminSetpassword::class, [], []);
+
+        $this->assertNull($this->invokeMethod($command, 'readEnvContent', ['/no/such/.env']));
+    }
+
+    public function testMergeAdminPasswordReplacesExistingValue(): void
+    {
+        $command = $this->makeCommand(AdminSetpassword::class, [], []);
+        $merged = $this->invokeMethod($command, 'mergeAdminPassword', ["ADMIN_PASSWORD=\"old\"\n", 'new-pass']);
+
+        $this->assertStringContainsString('ADMIN_PASSWORD="new-pass"', $merged);
+        $this->assertStringNotContainsString('old', $merged);
+    }
+
+    public function testMergeAdminPasswordInsertsAfterAppEnv(): void
+    {
+        $command = $this->makeCommand(AdminSetpassword::class, [], []);
+        $merged = $this->invokeMethod($command, 'mergeAdminPassword', ["APP_ENV=dev\nOTHER=1\n", 'secret']);
+
+        $this->assertMatchesRegularExpression('/APP_ENV=dev\nADMIN_PASSWORD="secret"/', $merged);
+    }
+
+    public function testMergeAdminPasswordAppendsWhenNoAppEnv(): void
+    {
+        $command = $this->makeCommand(AdminSetpassword::class, [], []);
+        $merged = $this->invokeMethod($command, 'mergeAdminPassword', ["OTHER=value\n", 'secret']);
+
+        $this->assertStringEndsWith("ADMIN_PASSWORD=\"secret\"\n", $merged);
+    }
 }
