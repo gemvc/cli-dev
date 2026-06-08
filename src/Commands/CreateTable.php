@@ -16,7 +16,7 @@ class CreateTable extends DevGenerator
             return false;
         }
         $this->serviceName = $this->formatServiceName($this->args[0]);
-        $this->basePath = defined('PROJECT_ROOT') ? PROJECT_ROOT : $this->determineProjectRoot();
+        $this->basePath = defined('PROJECT_ROOT') ? \PROJECT_ROOT : $this->determineProjectRoot();
 
         try {
             // Create necessary directories

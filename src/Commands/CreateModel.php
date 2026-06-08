@@ -37,7 +37,7 @@ class CreateModel extends DevGenerator
         }
 
         $this->serviceName = $this->formatServiceName($this->args[0]);
-        $this->basePath = defined('PROJECT_ROOT') ? PROJECT_ROOT : $this->determineProjectRoot();
+        $this->basePath = defined('PROJECT_ROOT') ? \PROJECT_ROOT : $this->determineProjectRoot();
         $this->parseFlags();
 
         try {

@@ -19,15 +19,10 @@ final class DevGeneratorTest extends CommandTestCase
             {
                 return true;
             }
-
-            public function loadTemplate(string $name): string
-            {
-                return $this->getTemplate($name);
-            }
         };
         $this->setProperty($generator, 'basePath', $this->projectRoot);
 
-        $this->assertSame('PROJECT {$serviceName}', $generator->loadTemplate('service'));
+        $this->assertSame('PROJECT {$serviceName}', $this->invokeMethod($generator, 'getTemplate', ['service']));
         $this->assertSame(
             'PROJECT User',
             $this->invokeMethod($generator, 'replaceTemplateVariables', ['PROJECT {$serviceName}', ['serviceName' => 'User']])
@@ -41,16 +36,10 @@ final class DevGeneratorTest extends CommandTestCase
             {
                 return true;
             }
-
-            public function loadTemplate(string $name): string
-            {
-                $this->basePath = dirname(__DIR__, 4);
-
-                return $this->getTemplate($name);
-            }
         };
+        $this->setProperty($generator, 'basePath', dirname(__DIR__, 4));
 
-        $content = $generator->loadTemplate('service');
+        $content = $this->invokeMethod($generator, 'getTemplate', ['service']);
         $this->assertStringContainsString('{$serviceName}', $content);
     }
 
