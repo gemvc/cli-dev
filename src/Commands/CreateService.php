@@ -11,17 +11,6 @@ class CreateService extends DevGenerator
     protected array $flags = [];
 
     /**
-     * Format service name to proper case
-     * 
-     * @param string $name
-     * @return string
-     */
-    protected function formatServiceName(string $name): string
-    {
-        return ucfirst(strtolower($name));
-    }
-
-    /**
      * Parse command line flags
      * 
      * @return void
@@ -124,19 +113,5 @@ class CreateService extends DevGenerator
         $path = $this->basePath . "/app/table/{$this->serviceName}Table.php";
         $this->writeFile($path, $content, "Table");
         return true;
-    }
-
-    protected function determineProjectRoot(): string
-    {
-        // Start with composer's vendor directory (where this file is located)
-        $vendorDir = dirname(dirname(dirname(dirname(__DIR__))));
-        
-        // If we're in the vendor directory, the project root is one level up
-        if (basename($vendorDir) === 'vendor') {
-            return dirname($vendorDir);
-        }
-        
-        // Fallback to current directory if we can't determine project root
-        return getcwd() ?: '.';
     }
 } 

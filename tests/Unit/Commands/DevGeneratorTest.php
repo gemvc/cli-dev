@@ -81,4 +81,29 @@ final class DevGeneratorTest extends CommandTestCase
         $this->expectException(\RuntimeException::class);
         $this->invokeMethod($generator, 'getTemplate', ['missing']);
     }
+
+    public function testFormatServiceName(): void
+    {
+        $generator = new class([], []) extends DevGenerator {
+            public function execute(): bool
+            {
+                return true;
+            }
+        };
+
+        $this->assertSame('User', $this->invokeMethod($generator, 'formatServiceName', ['user']));
+        $this->assertSame('Blogpost', $this->invokeMethod($generator, 'formatServiceName', ['BLOGPOST']));
+    }
+
+    public function testDetermineProjectRootUsesWorkingDirectory(): void
+    {
+        $generator = new class([], []) extends DevGenerator {
+            public function execute(): bool
+            {
+                return true;
+            }
+        };
+
+        $this->assertSame($this->projectRoot, $this->invokeMethod($generator, 'determineProjectRoot'));
+    }
 }

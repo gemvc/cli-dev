@@ -9,17 +9,6 @@ class CreateTable extends DevGenerator
     protected string $serviceName;
     protected string $basePath;
 
-    /**
-     * Format service name to proper case
-     * 
-     * @param string $name
-     * @return string
-     */
-    protected function formatServiceName(string $name): string
-    {
-        return ucfirst(strtolower($name));
-    }
-
     public function execute(): bool
     {
         if (empty($this->args[0]) || !is_string($this->args[0])) {
@@ -57,19 +46,5 @@ class CreateTable extends DevGenerator
         $path = $this->basePath . "/app/table/{$this->serviceName}Table.php";
         $this->writeFile($path, $content, "Table");
         return true;
-    }
-
-    protected function determineProjectRoot(): string
-    {
-        // Start with composer's vendor directory (where this file is located)
-        $vendorDir = dirname(dirname(dirname(dirname(__DIR__))));
-        
-        // If we're in the vendor directory, the project root is one level up
-        if (basename($vendorDir) === 'vendor') {
-            return dirname($vendorDir);
-        }
-        
-        // Fallback to current directory if we can't determine project root
-        return getcwd() ?: '.';
     }
 } 

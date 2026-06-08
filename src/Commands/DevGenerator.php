@@ -7,6 +7,22 @@ namespace Gemvc\CLI\Commands;
  */
 abstract class DevGenerator extends AbstractBaseCrudGenerator
 {
+    protected function formatServiceName(string $name): string
+    {
+        return ucfirst(strtolower($name));
+    }
+
+    protected function determineProjectRoot(): string
+    {
+        $vendorDir = dirname(dirname(dirname(dirname(__DIR__))));
+
+        if (basename($vendorDir) === 'vendor') {
+            return dirname($vendorDir);
+        }
+
+        return getcwd() ?: '.';
+    }
+
     protected function getCliDevInstallPath(): ?string
     {
         if (!class_exists(\Composer\InstalledVersions::class, false)) {
