@@ -160,6 +160,57 @@ final class SetAdminTest extends CommandTestCase
         })->execute());
     }
 
+    public function testPromptAdminDetailsCollectsInput(): void
+    {
+        $command = new class extends SetAdmin {
+            use SuppressesCliExit;
+
+            private int $step = 0;
+
+            protected function readInput(string $prompt): string
+            {
+                return match ($this->step++) {
+                    0 => 'Admin',
+                    1 => 'admin@example.com',
+                    default => 'Admin',
+                };
+            }
+
+            protected function readPassword(string $prompt): string
+            {
+                return 'password123';
+            }
+        };
+
+        $details = $this->invokeMethod($command, 'promptAdminDetails');
+        $this->assertSame(
+            ['name' => 'Admin', 'email' => 'admin@example.com', 'password' => 'password123'],
+            $details
+        );
+    }
+
+    public function testCreateAdminUserReturnsTrueOnSuccess(): void
+    {
+        UserModel::$response = (object) [
+            'response_code' => 201,
+            'message' => 'created',
+            'service_message' => 'ok',
+        ];
+
+        $command = new class extends SetAdmin {
+            use SuppressesCliExit;
+        };
+
+        $this->assertTrue($this->invokeMethod($command, 'createAdminUser', ['Admin', 'admin@example.com', 'pass']));
+    }
+
+    public function testIsValidEmail(): void
+    {
+        $command = $this->makeCommand(SetAdmin::class);
+        $this->assertTrue($this->invokeMethod($command, 'isValidEmail', ['user@example.com']));
+        $this->assertFalse($this->invokeMethod($command, 'isValidEmail', ['not-email']));
+    }
+
     private function interactiveSetAdmin(): SetAdmin
     {
         return new class extends SetAdmin {

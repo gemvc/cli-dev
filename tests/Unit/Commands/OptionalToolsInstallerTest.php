@@ -108,6 +108,16 @@ final class OptionalToolsInstallerTest extends CommandTestCase
         $this->assertStringContainsString('Invalid choice', $output);
     }
 
+    public function testGetPhpunitConfigTemplate(): void
+    {
+        $installer = $this->makeInstaller();
+        $template = $this->invokeMethod($installer, 'getPhpunitConfigTemplate');
+
+        $this->assertIsString($template);
+        $this->assertStringContainsString('<phpunit', $template);
+        $this->assertStringContainsString('<directory>tests</directory>', $template);
+    }
+
     /**
      * @param array<int, string> $lines
      */

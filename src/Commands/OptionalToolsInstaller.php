@@ -126,7 +126,7 @@ class OptionalToolsInstaller extends Command
     /**
      * Display tool installation prompt
      */
-    private function displayToolInstallationPrompt(string $title, string $question, string $description, string $additionalInfo = ''): void
+    protected function displayToolInstallationPrompt(string $title, string $question, string $description, string $additionalInfo = ''): void
     {
         $boxShow = new CliBoxShow();
         $boxShow->displayToolInstallationPrompt($title, $question, $description, $additionalInfo);
@@ -260,7 +260,7 @@ class OptionalToolsInstaller extends Command
     /**
      * Copy PHPStan configuration
      */
-    private function copyPhpstanConfig(): void
+    protected function copyPhpstanConfig(): void
     {
         $sourceConfig = $this->packagePath . '/src/startup/common/phpstan.neon';
         $targetConfig = $this->basePath . '/phpstan.neon';
@@ -286,17 +286,9 @@ class OptionalToolsInstaller extends Command
     /**
      * Create PHPUnit configuration
      */
-    private function createPhpunitConfig(): void
+    protected function getPhpunitConfigTemplate(): string
     {
-        $targetConfig = $this->basePath . '/phpunit.xml';
-        
-        // If file already exists, skip creating to avoid overwriting user's custom config
-        if (file_exists($targetConfig)) {
-            $this->info("PHPUnit configuration already exists: {$targetConfig}");
-            return;
-        }
-        
-        $phpunitConfig = '<?xml version="1.0" encoding="UTF-8"?>
+        return '<?xml version="1.0" encoding="UTF-8"?>
 <phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
          bootstrap="vendor/autoload.php"
@@ -314,8 +306,18 @@ class OptionalToolsInstaller extends Command
         </include>
     </coverage>
 </phpunit>';
-        
-        if (!file_put_contents($targetConfig, $phpunitConfig)) {
+    }
+
+    protected function createPhpunitConfig(): void
+    {
+        $targetConfig = $this->basePath . '/phpunit.xml';
+
+        if (file_exists($targetConfig)) {
+            $this->info("PHPUnit configuration already exists: {$targetConfig}");
+            return;
+        }
+
+        if (!file_put_contents($targetConfig, $this->getPhpunitConfigTemplate())) {
             throw new \RuntimeException("Failed to create PHPUnit configuration file");
         }
         
@@ -363,7 +365,7 @@ class OptionalToolsInstaller extends Command
     /**
      * Create a single directory with proper error handling
      */
-    private function createDirectoryIfNotExists(string $path): void
+    protected function createDirectoryIfNotExists(string $path): void
     {
         if (is_dir($path)) {
             $this->info("Directory already exists: {$path}");

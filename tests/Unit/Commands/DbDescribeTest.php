@@ -112,4 +112,38 @@ final class DbDescribeTest extends CommandTestCase
         $truncated = $this->invokeMethod($command, 'truncateString', [str_repeat('字', 40), 10]);
         $this->assertLessThanOrEqual(13, mb_strlen($truncated));
     }
+
+    public function testParseTableArgument(): void
+    {
+        $command = $this->makeCommand(DbDescribe::class, ['users']);
+
+        $this->assertSame('users', $this->invokeMethod($command, 'parseTableArgument'));
+        $this->assertNull($this->invokeMethod($this->makeCommand(DbDescribe::class, []), 'parseTableArgument'));
+    }
+
+    public function testFetchColumns(): void
+    {
+        $pdo = PdoMock::create($this, [
+            'SHOW COLUMNS' => [[
+                'Field' => 'id',
+                'Type' => 'int(11)',
+                'Null' => 'NO',
+                'Key' => 'PRI',
+                'Default' => null,
+                'Extra' => '',
+            ]],
+        ]);
+        $command = $this->makeCommand(DbDescribe::class, []);
+
+        $columns = $this->invokeMethod($command, 'fetchColumns', [$pdo, 'users']);
+        $this->assertIsArray($columns);
+        $this->assertSame('id', $columns[0]['Field']);
+    }
+
+    public function testPadString(): void
+    {
+        $command = $this->makeCommand(DbDescribe::class, []);
+
+        $this->assertSame('id  ', $this->invokeMethod($command, 'padString', ['id', 4]));
+    }
 }

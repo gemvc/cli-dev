@@ -18,58 +18,33 @@ class DbDescribe extends Command
     public function execute(): bool
     {
         try {
-            // Check if table name is provided
-            if (empty($this->args[0])) {
-                $this->error("Table name is required. Usage: gemvc db:describe TableName");
+            $tableName = $this->parseTableArgument();
+            if ($tableName === null) {
                 return false;
             }
 
-            $tableName = $this->args[0];
-            if (!is_string($tableName)) {
-                $this->error("Table name must be a string");
-                return false;
-            }
-            
             $this->loadProjectEnv();
 
             $dbName = $this->resolveDatabaseName();
             if ($dbName === null) {
                 throw new \Exception("Database name not found in configuration (DB_NAME)");
             }
-            
-            // Get database connection
+
             $pdo = DbConnect::connect();
             if (!$pdo) {
                 $this->error("Failed to connect to database");
                 return false;
             }
 
-            // Check if table exists
-            $stmt = $pdo->prepare("SHOW TABLES FROM `{$dbName}` LIKE ?");
-            $stmt->execute([$tableName]);
-            if ($stmt->rowCount() === 0) {
-                $this->error("Table '{$tableName}' not found in database '" . (string) $dbName . "'");
+            if (!$this->tableExists($pdo, $dbName, $tableName)) {
+                $this->error("Table '{$tableName}' not found in database '{$dbName}'");
                 return false;
             }
 
-            $this->displayTableHeader($tableName);
-
-            // 1. Show table structure (columns)
-            $this->showTableStructure($pdo, $tableName);
-
-            // 2. Show indexes
-            $this->showIndexes($pdo, $tableName);
-
-            // 3. Show foreign keys
-            $this->showForeignKeys($pdo, $tableName, $dbName);
-
-            // 4. Show table statistics
-            $this->showTableStatistics($pdo, $tableName, $dbName);
-
-            // 5. Show table options (engine, charset, etc.)
-            $this->showTableOptions($pdo, $tableName, $dbName);
+            $this->renderTableDescription($pdo, $tableName, $dbName);
 
             $this->write("\n");
+
             return true;
         } catch (\Exception $e) {
             $this->error("Failed to describe table: " . $e->getMessage());
@@ -77,16 +52,61 @@ class DbDescribe extends Command
         }
     }
 
-    private function showTableStructure(\PDO $pdo, string $tableName): void
+    protected function parseTableArgument(): ?string
+    {
+        if (empty($this->args[0])) {
+            $this->error("Table name is required. Usage: gemvc db:describe TableName");
+            return null;
+        }
+
+        if (!is_string($this->args[0])) {
+            $this->error("Table name must be a string");
+            return null;
+        }
+
+        return $this->args[0];
+    }
+
+    protected function tableExists(\PDO $pdo, string $dbName, string $tableName): bool
+    {
+        $stmt = $pdo->prepare("SHOW TABLES FROM `{$dbName}` LIKE ?");
+        $stmt->execute([$tableName]);
+
+        return $stmt->rowCount() > 0;
+    }
+
+    protected function renderTableDescription(\PDO $pdo, string $tableName, string $dbName): void
+    {
+        $this->displayTableHeader($tableName);
+        $this->showTableStructure($pdo, $tableName);
+        $this->showIndexes($pdo, $tableName);
+        $this->showForeignKeys($pdo, $tableName, $dbName);
+        $this->showTableStatistics($pdo, $tableName, $dbName);
+        $this->showTableOptions($pdo, $tableName, $dbName);
+    }
+
+    /**
+     * @return list<array<string, mixed>>|false
+     */
+    protected function fetchColumns(\PDO $pdo, string $tableName): array|false
+    {
+        $stmt = $pdo->query("SHOW COLUMNS FROM `{$tableName}`");
+        if ($stmt === false) {
+            return false;
+        }
+
+        return array_values($stmt->fetchAll(\PDO::FETCH_ASSOC));
+    }
+
+    protected function showTableStructure(\PDO $pdo, string $tableName): void
     {
         $this->displaySectionHeader("📋 COLUMNS");
 
-        $stmt = $pdo->query("SHOW COLUMNS FROM `{$tableName}`");
-        if ($stmt === false) {
+        $columns = $this->fetchColumns($pdo, $tableName);
+        if ($columns === false) {
             $this->error("Failed to query table columns");
             return;
         }
-        $columns = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 
         if (empty($columns)) {
             $this->echoBoxRow('No columns found');
@@ -99,40 +119,52 @@ class DbDescribe extends Command
         $headers = ['Field', 'Type', 'Null', 'Key', 'Default', 'Extra'];
         
         foreach ($columns as $column) {
-            $keyType = match($column['Key']) {
+            $key = isset($column['Key']) && is_string($column['Key']) ? $column['Key'] : '';
+            $keyType = match ($key) {
                 'PRI' => '🔑 PRI',
                 'UNI' => '🔒 UNI',
                 'MUL' => '📚 MUL',
-                default => $column['Key'] ?: '-'
+                default => $key !== '' ? $key : '-',
             };
-            
-            $null = $column['Null'] === 'YES' ? '✓' : '✗';
-            $default = $column['Default'] !== null ? $column['Default'] : '-';
-            $extra = $column['Extra'] ?: '-';
-            
+
+            $nullFlag = isset($column['Null']) && is_string($column['Null']) ? $column['Null'] : '';
+            $null = $nullFlag === 'YES' ? '✓' : '✗';
+
             $tableData[] = [
-                $column['Field'],
-                $column['Type'],
+                $this->stringifyCell($column['Field'] ?? null),
+                $this->stringifyCell($column['Type'] ?? null),
                 $null,
                 $keyType,
-                $default,
-                $extra
+                $this->stringifyCell($column['Default'] ?? null),
+                $this->stringifyCell($column['Extra'] ?? null),
             ];
         }
 
         $this->displayTable($headers, $tableData);
     }
 
-    private function showIndexes(\PDO $pdo, string $tableName): void
+    /**
+     * @return list<array<string, mixed>>|false
+     */
+    protected function fetchIndexes(\PDO $pdo, string $tableName): array|false
+    {
+        $stmt = $pdo->query("SHOW INDEX FROM `{$tableName}`");
+        if ($stmt === false) {
+            return false;
+        }
+
+        return array_values($stmt->fetchAll(\PDO::FETCH_ASSOC));
+    }
+
+    protected function showIndexes(\PDO $pdo, string $tableName): void
     {
         $this->displaySectionHeader("🔍 INDEXES");
 
-        $stmt = $pdo->query("SHOW INDEX FROM `{$tableName}`");
-        if ($stmt === false) {
+        $indexes = $this->fetchIndexes($pdo, $tableName);
+        if ($indexes === false) {
             $this->error("Failed to query table indexes");
             return;
         }
-        $indexes = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 
         if (empty($indexes)) {
             $this->echoBoxRow('No indexes found');
@@ -142,7 +174,8 @@ class DbDescribe extends Command
 
         $groupedIndexes = [];
         foreach ($indexes as $index) {
-            $groupedIndexes[$index['Key_name']][] = $index;
+            $keyName = isset($index['Key_name']) && is_string($index['Key_name']) ? $index['Key_name'] : '';
+            $groupedIndexes[$keyName][] = $index;
         }
 
         $tableData = [];
@@ -150,11 +183,15 @@ class DbDescribe extends Command
 
         foreach ($groupedIndexes as $indexName => $indexColumns) {
             $firstColumn = $indexColumns[0];
-            $unique = $firstColumn['Non_unique'] == 0 ? '🔒 Yes' : '❌ No';
-            $type = $firstColumn['Index_type'];
-            
-            $columns = array_map(function($col) {
-                return $col['Column_name'] . ($col['Sub_part'] ? "({$col['Sub_part']})" : '');
+            $nonUnique = $firstColumn['Non_unique'] ?? 1;
+            $unique = $nonUnique == 0 ? '🔒 Yes' : '❌ No';
+            $type = $this->stringifyCell($firstColumn['Index_type'] ?? null);
+
+            $columns = array_map(function (array $col): string {
+                $name = $this->stringifyCell($col['Column_name'] ?? null);
+                $subPart = $col['Sub_part'] ?? null;
+
+                return $name . (is_scalar($subPart) && $subPart !== '' ? '(' . (string) $subPart . ')' : '');
             }, $indexColumns);
             
             $indexIcon = match($indexName) {
@@ -169,18 +206,18 @@ class DbDescribe extends Command
                 $indexIcon . ' ' . $indexName,
                 $type,
                 $unique,
-                implode(', ', $columns)
+                implode(', ', $columns),
             ];
         }
 
         $this->displayTable($headers, $tableData);
     }
 
-    private function showForeignKeys(\PDO $pdo, string $tableName, string $dbName): void
+    /**
+     * @return list<array<string, mixed>>
+     */
+    protected function fetchForeignKeys(\PDO $pdo, string $tableName, string $dbName): array
     {
-        $this->displaySectionHeader("🔗 FOREIGN KEYS");
-
-        // First get basic foreign key information
         $query = "
             SELECT 
                 CONSTRAINT_NAME,
@@ -195,15 +232,15 @@ class DbDescribe extends Command
 
         $stmt = $pdo->prepare($query);
         $stmt->execute([$dbName, $tableName]);
-        $foreignKeys = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 
-        if (empty($foreignKeys)) {
-            $this->echoBoxRow('No foreign keys found');
-            $this->echoBoxClose();
-            return;
-        }
+        return array_values($stmt->fetchAll(\PDO::FETCH_ASSOC));
+    }
 
-        // Try to get referential constraints for DELETE_RULE and UPDATE_RULE
+    /**
+     * @return list<array<string, mixed>>
+     */
+    protected function fetchReferentialConstraints(\PDO $pdo, string $tableName, string $dbName): array
+    {
         $constraintQuery = "
             SELECT 
                 CONSTRAINT_NAME,
@@ -216,14 +253,33 @@ class DbDescribe extends Command
 
         $constraintStmt = $pdo->prepare($constraintQuery);
         $constraintStmt->execute([$dbName, $tableName]);
-        $constraints = $constraintStmt->fetchAll(\PDO::FETCH_ASSOC);
+
+        return array_values($constraintStmt->fetchAll(\PDO::FETCH_ASSOC));
+    }
+
+    protected function showForeignKeys(\PDO $pdo, string $tableName, string $dbName): void
+    {
+        $this->displaySectionHeader("🔗 FOREIGN KEYS");
+
+        $foreignKeys = $this->fetchForeignKeys($pdo, $tableName, $dbName);
+
+        if ($foreignKeys === []) {
+            $this->echoBoxRow('No foreign keys found');
+            $this->echoBoxClose();
+            return;
+        }
+
+        $constraints = $this->fetchReferentialConstraints($pdo, $tableName, $dbName);
 
         // Create a lookup array for constraints
         $constraintRules = [];
         foreach ($constraints as $constraint) {
-            $constraintRules[$constraint['CONSTRAINT_NAME']] = [
-                'DELETE_RULE' => $constraint['DELETE_RULE'],
-                'UPDATE_RULE' => $constraint['UPDATE_RULE']
+            $constraintName = isset($constraint['CONSTRAINT_NAME']) && is_string($constraint['CONSTRAINT_NAME'])
+                ? $constraint['CONSTRAINT_NAME']
+                : '';
+            $constraintRules[$constraintName] = [
+                'DELETE_RULE' => $this->stringifyCell($constraint['DELETE_RULE'] ?? null),
+                'UPDATE_RULE' => $this->stringifyCell($constraint['UPDATE_RULE'] ?? null),
             ];
         }
 
@@ -231,32 +287,36 @@ class DbDescribe extends Command
         $headers = ['Constraint', 'Column', 'References', 'On Delete', 'On Update'];
 
         foreach ($foreignKeys as $fk) {
+            $constraintName = isset($fk['CONSTRAINT_NAME']) && is_string($fk['CONSTRAINT_NAME'])
+                ? $fk['CONSTRAINT_NAME']
+                : '';
             $deleteRule = 'N/A';
             $updateRule = 'N/A';
-            
-            // Add referential actions if available
-            if (isset($constraintRules[$fk['CONSTRAINT_NAME']])) {
-                $rules = $constraintRules[$fk['CONSTRAINT_NAME']];
+
+            if (isset($constraintRules[$constraintName])) {
+                $rules = $constraintRules[$constraintName];
                 $deleteRule = $rules['DELETE_RULE'];
                 $updateRule = $rules['UPDATE_RULE'];
             }
-            
+
             $tableData[] = [
-                '🔗 ' . $fk['CONSTRAINT_NAME'],
-                $fk['COLUMN_NAME'],
-                $fk['REFERENCED_TABLE_NAME'] . '.' . $fk['REFERENCED_COLUMN_NAME'],
+                '🔗 ' . $constraintName,
+                $this->stringifyCell($fk['COLUMN_NAME'] ?? null),
+                $this->stringifyCell($fk['REFERENCED_TABLE_NAME'] ?? null) . '.'
+                    . $this->stringifyCell($fk['REFERENCED_COLUMN_NAME'] ?? null),
                 $deleteRule,
-                $updateRule
+                $updateRule,
             ];
         }
 
         $this->displayTable($headers, $tableData);
     }
 
-    private function showTableStatistics(\PDO $pdo, string $tableName, string $dbName): void
+    /**
+     * @return array<string, mixed>|false
+     */
+    protected function fetchTableStatistics(\PDO $pdo, string $tableName, string $dbName): array|false
     {
-        $this->displaySectionHeader("📊 STATISTICS");
-
         $query = "
             SELECT 
                 TABLE_ROWS as row_count,
@@ -272,8 +332,16 @@ class DbDescribe extends Command
         $stmt->execute([$dbName, $tableName]);
         $stats = $stmt->fetch(\PDO::FETCH_ASSOC);
 
-        if ($stats && is_array($stats)) {
-            /** @var array<string, mixed> $stats */
+        return $this->normalizeAssocRow($stats);
+    }
+
+    protected function showTableStatistics(\PDO $pdo, string $tableName, string $dbName): void
+    {
+        $this->displaySectionHeader("📊 STATISTICS");
+
+        $stats = $this->fetchTableStatistics($pdo, $tableName, $dbName);
+
+        if ($stats !== false) {
             $rowCount = isset($stats['row_count']) && is_numeric($stats['row_count']) ? (int) $stats['row_count'] : 0;
             $dataSize = isset($stats['data_size']) && is_numeric($stats['data_size']) ? (int) $stats['data_size'] : 0;
             $indexSize = isset($stats['index_size']) && is_numeric($stats['index_size']) ? (int) $stats['index_size'] : 0;
@@ -297,10 +365,11 @@ class DbDescribe extends Command
         }
     }
 
-    private function showTableOptions(\PDO $pdo, string $tableName, string $dbName): void
+    /**
+     * @return array<string, mixed>|false
+     */
+    protected function fetchTableOptions(\PDO $pdo, string $tableName, string $dbName): array|false
     {
-        $this->displaySectionHeader("⚙️ TABLE OPTIONS");
-
         $query = "
             SELECT 
                 ENGINE,
@@ -316,8 +385,16 @@ class DbDescribe extends Command
         $stmt->execute([$dbName, $tableName]);
         $options = $stmt->fetch(\PDO::FETCH_ASSOC);
 
-        if ($options && is_array($options)) {
-            /** @var array<string, mixed> $options */
+        return $this->normalizeAssocRow($options);
+    }
+
+    protected function showTableOptions(\PDO $pdo, string $tableName, string $dbName): void
+    {
+        $this->displaySectionHeader("⚙️ TABLE OPTIONS");
+
+        $options = $this->fetchTableOptions($pdo, $tableName, $dbName);
+
+        if ($options !== false) {
             $engine = isset($options['ENGINE']) && is_string($options['ENGINE']) ? $options['ENGINE'] : 'Unknown';
             $collation = isset($options['TABLE_COLLATION']) && is_string($options['TABLE_COLLATION']) ? $options['TABLE_COLLATION'] : 'Unknown';
             
@@ -345,7 +422,39 @@ class DbDescribe extends Command
         }
     }
 
-    private function formatBytes(int $bytes): string
+    /**
+     * @return array<string, mixed>|false
+     */
+    protected function normalizeAssocRow(mixed $row): array|false
+    {
+        if (!is_array($row)) {
+            return false;
+        }
+
+        $normalized = [];
+        foreach ($row as $key => $value) {
+            if (is_string($key)) {
+                $normalized[$key] = $value;
+            }
+        }
+
+        return $normalized;
+    }
+
+    protected function stringifyCell(mixed $value): string
+    {
+        if ($value === null || $value === '') {
+            return '-';
+        }
+
+        if (is_string($value) || is_int($value) || is_float($value)) {
+            return (string) $value;
+        }
+
+        return '-';
+    }
+
+    protected function formatBytes(int $bytes): string
     {
         $units = ['B', 'KB', 'MB', 'GB', 'TB'];
         $i = 0;
@@ -356,13 +465,13 @@ class DbDescribe extends Command
         return round($bytes, 2) . ' ' . $units[$i];
     }
 
-    private function displayTableHeader(string $tableName): void
+    protected function displayTableHeader(string $tableName): void
     {
         $boxShow = new CliBoxShow();
         $boxShow->displayInfoBox('TABLE: ' . strtoupper($tableName), []);
     }
 
-    private function displaySectionHeader(string $title): void
+    protected function displaySectionHeader(string $title): void
     {
         $this->write("\n", CliColor::White);
         $this->write('┌' . str_repeat('─', self::TABLE_BOX_WIDTH) . "┐\n", CliColor::Blue);
@@ -375,10 +484,10 @@ class DbDescribe extends Command
     }
 
     /**
-     * @param array<string> $headers
-     * @param array<array<string>> $data
+     * @param array<int, string> $headers
+     * @param array<int, array<int, string>> $data
      */
-    private function displayTable(array $headers, array $data): void
+    protected function displayTable(array $headers, array $data): void
     {
         if (empty($data)) {
             $this->echoBoxRow('No data available');
@@ -452,29 +561,29 @@ class DbDescribe extends Command
         $this->echoBoxClose();
     }
 
-    private function echoBoxRow(string $content): void
+    protected function echoBoxRow(string $content): void
     {
         echo CliLine::boxRow($content, self::TABLE_BOX_WIDTH, CliColor::Blue);
     }
 
-    private function echoBoxClose(): void
+    protected function echoBoxClose(): void
     {
         $this->write('└' . str_repeat('─', self::TABLE_BOX_WIDTH) . "┘\n", CliColor::Blue);
     }
 
-    private function getDisplayWidth(string $text): int
+    protected function getDisplayWidth(string $text): int
     {
         return CliLine::displayWidth($text);
     }
 
-    private function padString(string $text, int $width): string
+    protected function padString(string $text, int $width): string
     {
         $displayWidth = $this->getDisplayWidth($text);
         $padding = $width - $displayWidth;
         return $text . str_repeat(' ', max(0, $padding));
     }
 
-    private function truncateString(string $text, int $maxWidth): string
+    protected function truncateString(string $text, int $maxWidth): string
     {
         if ($this->getDisplayWidth($text) <= $maxWidth) {
             return $text;
