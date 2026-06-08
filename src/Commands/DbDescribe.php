@@ -7,10 +7,10 @@ use Gemvc\CLI\CliLine;
 use Gemvc\CLI\Command;
 use Gemvc\CLI\Commands\CliBoxShow;
 use Gemvc\CLI\Commands\DbConnect;
-use Gemvc\Helper\ProjectHelper;
-
 class DbDescribe extends Command
 {
+    use ResolvesDatabaseEnvironment;
+
     private const TABLE_BOX_WIDTH = 78;
 
     protected string $description = "Describe a specific database table structure in detail. Shows columns, indexes, foreign keys, and table statistics.";
@@ -30,12 +30,10 @@ class DbDescribe extends Command
                 return false;
             }
             
-            // Load environment variables
-            ProjectHelper::loadEnv();
-            
-            // Get database name from environment
-            $dbName = $_ENV['DB_NAME'] ?? null;
-            if (!$dbName || !is_string($dbName)) {
+            $this->loadProjectEnv();
+
+            $dbName = $this->resolveDatabaseName();
+            if ($dbName === null) {
                 throw new \Exception("Database name not found in configuration (DB_NAME)");
             }
             

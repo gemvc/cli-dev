@@ -5,16 +5,17 @@ namespace Gemvc\CLI\Commands;
 use Gemvc\CLI\CliColor;
 use Gemvc\CLI\Command;
 use Gemvc\CLI\Commands\DbConnect;
-use Gemvc\Helper\ProjectHelper;
 
 class DbList extends Command
 {
+    use ResolvesDatabaseEnvironment;
+
     public function execute(): bool
     {
         try {
             $this->info("Fetching database tables...");
 
-            ProjectHelper::loadEnv();
+            $this->loadProjectEnv();
 
             $dbName = $this->resolveDatabaseName();
             if ($dbName === null) {
@@ -43,17 +44,6 @@ class DbList extends Command
             $this->error("Failed to list tables: " . $e->getMessage());
             return false;
         }
-    }
-
-    protected function resolveDatabaseName(): ?string
-    {
-        $dbName = $_ENV['DB_NAME'] ?? null;
-
-        if (!$dbName || !is_string($dbName)) {
-            return null;
-        }
-
-        return $dbName;
     }
 
     /**

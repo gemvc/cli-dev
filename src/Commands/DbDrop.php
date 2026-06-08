@@ -4,7 +4,6 @@ namespace Gemvc\CLI\Commands;
 
 use Gemvc\CLI\CliColor;
 use Gemvc\CLI\Command;
-use Gemvc\Helper\ProjectHelper;
 use PDO;
 
 /**
@@ -12,6 +11,8 @@ use PDO;
  */
 class DbDrop extends Command
 {
+    use ResolvesDatabaseEnvironment;
+
     protected function readConfirmation(): string
     {
         $this->write("\nAre you sure you want to drop this table? (yes/no): ", CliColor::Yellow);
@@ -29,7 +30,7 @@ class DbDrop extends Command
 
     public function execute(): bool
     {
-        ProjectHelper::loadEnv();
+        $this->loadProjectEnv();
 
         try {
             $parsed = $this->parseDropArguments();

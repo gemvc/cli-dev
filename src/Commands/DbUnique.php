@@ -4,7 +4,6 @@ namespace Gemvc\CLI\Commands;
 
 use Gemvc\CLI\Command;
 use Gemvc\CLI\Commands\DbConnect;
-use Gemvc\Helper\ProjectHelper;
 
 /**
  * CLI Command to add a unique constraint to a table column.
@@ -21,6 +20,8 @@ use Gemvc\Helper\ProjectHelper;
  */
 class DbUnique extends Command
 {
+    use ResolvesDatabaseEnvironment;
+
     public function execute(): bool
     {
         if (empty($this->args[0]) || !is_string($this->args[0])) {
@@ -34,7 +35,7 @@ class DbUnique extends Command
             return false;
         }
 
-        ProjectHelper::loadEnv();
+        $this->loadProjectEnv();
         $pdo = DbConnect::connect();
         if (!$pdo) {
             $this->error("Could not connect to database.");
