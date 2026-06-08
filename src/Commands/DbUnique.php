@@ -42,9 +42,11 @@ class DbUnique extends Command
         }
 
         [$table, $columns] = explode('/', $argument, 2);
-        $columnList = array_map('trim', explode(',', $columns));
-        // @phpstan-ignore-next-line
-        if (!$table || count($columnList) === 0) {
+        $columnList = array_values(array_filter(
+            array_map('trim', explode(',', $columns)),
+            static fn (string $column): bool => $column !== ''
+        ));
+        if ($table === '' || $columnList === []) {
             $this->error("Invalid format. Use: gemvc db:unique table/col1,col2,...");
             return false;
         }

@@ -1,37 +1,137 @@
 <?php
 
-declare(strict_types=1);
-
 namespace Gemvc\CLI\Commands;
 
-/**
- * PHPStan / dev autoload stub — real implementation in gemvc/library.
- */
-class DbConnect
+use Gemvc\Helper\ProjectHelper;
+use PDO;
+use Gemvc\CLI\Command;
+
+class DbConnect extends Command
 {
-    private static ?\PDO $connection = null;
+    private static ?PDO $testConnection = null;
 
-    private static ?\PDO $rootConnection = null;
+    private static ?PDO $testRootConnection = null;
 
-    public static function configure(?\PDO $connection = null, ?\PDO $rootConnection = null): void
+    private static bool $testMode = false;
+
+    public static function configure(?PDO $connection = null, ?PDO $rootConnection = null): void
     {
-        self::$connection = $connection;
-        self::$rootConnection = $rootConnection;
+        self::$testConnection = $connection;
+        self::$testRootConnection = $rootConnection;
+        self::$testMode = true;
     }
 
     public static function reset(): void
     {
-        self::$connection = null;
-        self::$rootConnection = null;
+        self::$testConnection = null;
+        self::$testRootConnection = null;
+        self::$testMode = false;
     }
 
-    public static function connect(): ?\PDO
+    /**
+     * Connect to the database as root not to specific database
+     * @return PDO|null
+     */
+    public static function connectAsRoot(): ?PDO
     {
-        return self::$connection;
+        if (self::$testMode) {
+            return self::$testRootConnection ?? self::$testConnection;
+        }
+
+        ProjectHelper::loadEnv();
+        $me = new self();
+        $dbHost = is_string($_ENV['DB_HOST_CLI_DEV'] ?? null) ? $_ENV['DB_HOST_CLI_DEV'] : 'localhost';
+        $dbUser = is_string($_ENV['DB_USER'] ?? null) ? $_ENV['DB_USER'] : 'root';
+        $dbPass = is_string($_ENV['DB_PASSWORD'] ?? null) ? $_ENV['DB_PASSWORD'] : '';
+        $dbPort = is_string($_ENV['DB_PORT'] ?? null) ? $_ENV['DB_PORT'] : '3306';
+        $dbCharset = is_string($_ENV['DB_CHARSET'] ?? null) ? $_ENV['DB_CHARSET'] : 'utf8mb4';
+        
+        // Create connection without database name
+        $dsn = sprintf(
+            'mysql:host=%s;port=%s;charset=%s',
+            $dbHost,
+            $dbPort,
+            $dbCharset
+        );
+
+            $mysqlInitCmdAttr = \PHP_VERSION_ID >= 80500 && \class_exists('Pdo\\Mysql')
+                ? \Pdo\Mysql::ATTR_INIT_COMMAND
+                : \PDO::MYSQL_ATTR_INIT_COMMAND;
+            $options = [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_TIMEOUT => 5,
+                $mysqlInitCmdAttr => "SET NAMES {$dbCharset}"
+            ];
+            $me->info("trying to connect to the database as root on the host {$dbHost}...");
+            $pdo = null;
+            try{
+                $pdo = new PDO($dsn, $dbUser, $dbPass, $options);
+                $me->success("Connected to the database as root successfully",false);
+                return $pdo;
+            }catch(\Exception $e){
+                $me->error("Failed to connect to the database as root: ".$e->getMessage());
+                return null;
+            }
+    }
+    /**
+     * Connect to the database with or without special Database name
+     * @return PDO|null
+     */
+    public static function connect(): ?PDO
+    {
+        if (self::$testMode) {
+            return self::$testConnection;
+        }
+
+        ProjectHelper::loadEnv();
+        $me = new self();
+        $dbHost = is_string($_ENV['DB_HOST_CLI_DEV'] ?? null) ? $_ENV['DB_HOST_CLI_DEV'] : 'localhost';
+        $dbUser = is_string($_ENV['DB_USER'] ?? null) ? $_ENV['DB_USER'] : 'root';
+        $dbPass = is_string($_ENV['DB_PASSWORD'] ?? null) ? $_ENV['DB_PASSWORD'] : '';
+        $dbPort = is_string($_ENV['DB_PORT'] ?? null) ? $_ENV['DB_PORT'] : '3306';
+        $dbCharset = is_string($_ENV['DB_CHARSET'] ?? null) ? $_ENV['DB_CHARSET'] : 'utf8mb4';
+        $dbName = is_string($_ENV['DB_NAME'] ?? null) ? $_ENV['DB_NAME'] : '';
+        $me->info("trying to connect to the database {$dbName} on the host {$dbHost}...");
+        $dsn = sprintf(
+                'mysql:host=%s;port=%s;dbname=%s;charset=%s',
+                $dbHost,
+                $dbPort,
+                $dbName,
+                $dbCharset
+            );
+        $mysqlInitCmdAttr = \PHP_VERSION_ID >= 80500 && \class_exists('Pdo\\Mysql')
+            ? \Pdo\Mysql::ATTR_INIT_COMMAND
+            : \PDO::MYSQL_ATTR_INIT_COMMAND;
+        $options = [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_TIMEOUT => 5,
+            $mysqlInitCmdAttr => "SET NAMES {$dbCharset}"
+        ];
+        $pdo = null;
+        try{
+            $pdo = new PDO($dsn, $dbUser, $dbPass, $options);
+            $me->success("Connected to the database {$dbName} on the host {$dbHost} successfully",false);
+            return $pdo;
+        }catch(\Exception $e){
+            $me->error("Failed to connect to the database {$dbName} on the host {$dbHost}: ".$e->getMessage());
+            return null;
+        }
     }
 
-    public static function connectAsRoot(): ?\PDO
+    public function execute(): bool
     {
-        return self::$rootConnection ?? self::$connection;
+        $this->info(" Test Connecting to the database...");
+        $pdo = self::connect();
+        if($pdo){
+            $this->success("Connected to the database successfully",false);
+            return true;
+        }else{
+            $this->error("Failed to connect to the database");
+            return false;
+        }
     }
+
+
 }

@@ -33,7 +33,9 @@ abstract class CommandTestCase extends TestCase
 
         ProjectHelper::configure($this->projectRoot, ['DB_NAME' => 'test_db', 'DB_HOST' => 'localhost']);
         DbConnect::reset();
+        DbConnect::configure(null, null);
         DbMigrate::reset();
+        DbMigrate::enableTestMode();
         UserModel::reset();
     }
 
