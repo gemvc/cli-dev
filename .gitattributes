@@ -11,3 +11,4 @@ phpstan.neon                export-ignore
 .gitignore                  export-ignore
 .gitattributes              export-ignore
 RELEASE_NOTES.md            export-ignore
+.phpunit.cache               export-ignore
