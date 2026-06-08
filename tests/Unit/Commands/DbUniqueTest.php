@@ -62,4 +62,43 @@ final class DbUniqueTest extends CommandTestCase
         DbConnect::configure(null);
         $this->assertFalse($this->makeCommand(DbUnique::class, ['users/email'])->execute());
     }
+
+    public function testParseUniqueArgument(): void
+    {
+        $command = $this->makeCommand(DbUnique::class);
+
+        $this->assertSame(
+            ['table' => 'users', 'columns' => ['email', 'name']],
+            $this->invokeMethod($command, 'parseUniqueArgument', ['users/email,name'])
+        );
+        $this->assertNull($this->invokeMethod($command, 'parseUniqueArgument', ['invalid']));
+        $this->assertNull($this->invokeMethod($command, 'parseUniqueArgument', ['users/']));
+    }
+
+    public function testBuildDuplicateCheckSql(): void
+    {
+        $command = $this->makeCommand(DbUnique::class);
+        $sql = $this->invokeMethod($command, 'buildDuplicateCheckSql', ['users', ['email', 'name']]);
+
+        $this->assertStringContainsString('`users`', $sql);
+        $this->assertStringContainsString('email`,`name', $sql);
+        $this->assertStringContainsString('HAVING cnt > 1', $sql);
+    }
+
+    public function testReportDuplicatesWritesRows(): void
+    {
+        $command = $this->makeCommand(DbUnique::class);
+        $output = $this->captureOutput(fn () => $this->invokeMethod($command, 'reportDuplicates', [
+            'users',
+            ['email'],
+            [['email' => 'a@b.com', 'cnt' => 2]],
+        ]));
+
+        $this->assertStringContainsString('email=a@b.com', $output);
+        $this->assertFalse($this->invokeMethod($command, 'reportDuplicates', [
+            'users',
+            ['email'],
+            [['email' => 'a@b.com', 'cnt' => 2]],
+        ]));
+    }
 }

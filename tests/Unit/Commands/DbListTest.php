@@ -53,4 +53,29 @@ final class DbListTest extends CommandTestCase
         DbConnect::configure(null);
         $this->assertFalse($this->makeCommand(DbList::class)->execute());
     }
+
+    public function testResolveDatabaseName(): void
+    {
+        $command = $this->makeCommand(DbList::class);
+        $this->assertSame('test_db', $this->invokeMethod($command, 'resolveDatabaseName'));
+    }
+
+    public function testFormatColumnLine(): void
+    {
+        $command = $this->makeCommand(DbList::class);
+        $line = $this->invokeMethod($command, 'formatColumnLine', [[
+            'Field' => 'id',
+            'Type' => 'int(11)',
+            'Null' => 'NO',
+            'Key' => 'PRI',
+            'Default' => null,
+            'Extra' => 'auto_increment',
+        ]]);
+
+        $this->assertStringContainsString('id:', $line);
+        $this->assertStringContainsString('int(11)', $line);
+        $this->assertStringContainsString('NOT NULL', $line);
+        $this->assertStringContainsString('(PRI)', $line);
+        $this->assertStringContainsString('auto_increment', $line);
+    }
 }

@@ -21,37 +21,19 @@ use Gemvc\Helper\ProjectHelper;
  */
 class DbUnique extends Command
 {
-    /**
-     * Execute the command to add a unique constraint to a table column.
-     *
-     * @return bool
-     */
     public function execute(): bool
     {
-        // Check for required argument
         if (empty($this->args[0]) || !is_string($this->args[0])) {
             $this->error("Usage: gemvc db:unique table/column");
             return false;
         }
 
-        // Parse table and columns from argument (format: table/col1,col2,...)
-        $argument = $this->args[0];
-        if (!str_contains($argument, '/')) {
+        $parsed = $this->parseUniqueArgument($this->args[0]);
+        if ($parsed === null) {
             $this->error("Invalid format. Use: gemvc db:unique table/col1,col2,...");
             return false;
         }
 
-        [$table, $columns] = explode('/', $argument, 2);
-        $columnList = array_values(array_filter(
-            array_map('trim', explode(',', $columns)),
-            static fn (string $column): bool => $column !== ''
-        ));
-        if ($table === '' || $columnList === []) {
-            $this->error("Invalid format. Use: gemvc db:unique table/col1,col2,...");
-            return false;
-        }
-
-        // Load environment variables and connect to the database
         ProjectHelper::loadEnv();
         $pdo = DbConnect::connect();
         if (!$pdo) {
@@ -59,36 +41,103 @@ class DbUnique extends Command
             return false;
         }
 
-        // Check for duplicate combinations
-        $colSql = implode('`,`', $columnList);
-        $sql = "SELECT $colSql, COUNT(*) as cnt FROM `$table` GROUP BY $colSql HAVING cnt > 1";
-        $stmt = $pdo->query($sql);
-        if ($stmt === false) {
+        $duplicates = $this->findDuplicateRows($pdo, $parsed['table'], $parsed['columns']);
+        if ($duplicates === false) {
             $this->error("Failed to check for duplicates");
             return false;
         }
-        $duplicates = $stmt->fetchAll();
-        if ($duplicates) {
-            $this->error("Cannot add unique constraint: Duplicate value combinations found in (" . implode(', ', $columnList) . ").");
-            foreach ($duplicates as $row) {
-                $values = [];
-                foreach ($columnList as $col) {
-                    $values[] = $col . '=' . $row[$col];
-                }
-                $this->write("Duplicate: " . implode(', ', $values));
-                return false;
-            }
+
+        if ($duplicates !== []) {
+            return $this->reportDuplicates($parsed['table'], $parsed['columns'], $duplicates);
         }
 
-        // Try to add the unique constraint
-        $constraintName = "unique_" . implode('_', $columnList);
-        $colSqlBacktick = '`' . implode('`,`', $columnList) . '`';
+        return $this->addUniqueConstraint($pdo, $parsed['table'], $parsed['columns']);
+    }
+
+    /**
+     * @return array{table: string, columns: list<string>}|null
+     */
+    protected function parseUniqueArgument(string $argument): ?array
+    {
+        if (!str_contains($argument, '/')) {
+            return null;
+        }
+
+        [$table, $columns] = explode('/', $argument, 2);
+        $columnList = array_values(array_filter(
+            array_map('trim', explode(',', $columns)),
+            static fn (string $column): bool => $column !== ''
+        ));
+
+        if ($table === '' || $columnList === []) {
+            return null;
+        }
+
+        return ['table' => $table, 'columns' => $columnList];
+    }
+
+    /**
+     * @param list<string> $columns
+     */
+    protected function buildDuplicateCheckSql(string $table, array $columns): string
+    {
+        $colSql = implode('`,`', $columns);
+
+        return "SELECT $colSql, COUNT(*) as cnt FROM `$table` GROUP BY $colSql HAVING cnt > 1";
+    }
+
+    /**
+     * @param list<string> $columns
+     * @return list<array<string, mixed>>|false
+     */
+    protected function findDuplicateRows(\PDO $pdo, string $table, array $columns): array|false
+    {
+        $stmt = $pdo->query($this->buildDuplicateCheckSql($table, $columns));
+        if ($stmt === false) {
+            return false;
+        }
+
+        return array_values($stmt->fetchAll());
+    }
+
+    /**
+     * @param list<string> $columns
+     * @param list<array<string, mixed>> $duplicates
+     */
+    protected function reportDuplicates(string $table, array $columns, array $duplicates): bool
+    {
+        $this->error(
+            "Cannot add unique constraint: Duplicate value combinations found in (" . implode(', ', $columns) . ")."
+        );
+
+        foreach ($duplicates as $row) {
+            $values = [];
+            foreach ($columns as $col) {
+                $cell = $row[$col] ?? '';
+                $values[] = $col . '=' . (is_scalar($cell) ? (string) $cell : '');
+            }
+            $this->write("Duplicate: " . implode(', ', $values));
+        }
+
+        return false;
+    }
+
+    /**
+     * @param list<string> $columns
+     */
+    protected function addUniqueConstraint(\PDO $pdo, string $table, array $columns): bool
+    {
+        $constraintName = 'unique_' . implode('_', $columns);
+        $colSqlBacktick = '`' . implode('`,`', $columns) . '`';
+
         try {
             $pdo->exec("ALTER TABLE `$table` ADD CONSTRAINT `$constraintName` UNIQUE ($colSqlBacktick)");
-            $this->success("Unique constraint added to `$table` on (" . implode(', ', $columnList) . ") successfully!");
+            $this->success("Unique constraint added to `$table` on (" . implode(', ', $columns) . ") successfully!");
+
             return true;
         } catch (\PDOException $e) {
             $this->error("Failed to add unique constraint: " . $e->getMessage());
+
             return false;
         }
     }

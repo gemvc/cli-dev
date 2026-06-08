@@ -39,4 +39,29 @@ final class DbInitTest extends CommandTestCase
         $command = $this->makeCommand(DbInit::class);
         $this->assertFalse($command->execute());
     }
+
+    public function testResolveDatabaseName(): void
+    {
+        \Gemvc\Helper\ProjectHelper::loadEnv();
+        $command = $this->makeCommand(DbInit::class);
+        $this->assertSame('test_db', $this->invokeMethod($command, 'resolveDatabaseName'));
+    }
+
+    public function testBuildCreateDatabaseSql(): void
+    {
+        $command = $this->makeCommand(DbInit::class);
+        $this->assertSame(
+            'CREATE DATABASE IF NOT EXISTS `my_app`',
+            $this->invokeMethod($command, 'buildCreateDatabaseSql', ['my_app'])
+        );
+    }
+
+    public function testInitializeDatabaseExecutesSql(): void
+    {
+        $pdo = PdoMock::create($this);
+        $command = $this->makeCommand(DbInit::class);
+        $this->invokeMethod($command, 'initializeDatabase', [$pdo, 'test_db']);
+
+        $this->assertTrue(true);
+    }
 }

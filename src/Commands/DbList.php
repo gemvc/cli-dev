@@ -1,8 +1,8 @@
 <?php
 
 namespace Gemvc\CLI\Commands;
-use Gemvc\CLI\CliColor;
 
+use Gemvc\CLI\CliColor;
 use Gemvc\CLI\Command;
 use Gemvc\CLI\Commands\DbConnect;
 use Gemvc\Helper\ProjectHelper;
@@ -13,81 +13,147 @@ class DbList extends Command
     {
         try {
             $this->info("Fetching database tables...");
-            
-            // Load environment variables
+
             ProjectHelper::loadEnv();
-            
-            // Get database name from environment
-            $dbName = $_ENV['DB_NAME'] ?? null;
-            if (!$dbName || !is_string($dbName)) {
+
+            $dbName = $this->resolveDatabaseName();
+            if ($dbName === null) {
                 $this->error("Database name not found in configuration (DB_NAME)");
                 return false;
             }
-            
-            // Get database connection
-            
+
             $pdo = DbConnect::connect();
             if (!$pdo) {
                 return false;
             }
-            
-            // Get all tables
-            $stmt = $pdo->query("SHOW TABLES FROM `{$dbName}`");
-            if ($stmt === false) {
+
+            $tables = $this->fetchTableNames($pdo, $dbName);
+            if ($tables === false) {
                 $this->error("Failed to query database tables");
                 return false;
             }
-            $tables = $stmt->fetchAll(\PDO::FETCH_COLUMN);
-            
-            if (empty($tables)) {
+
+            if ($tables === []) {
                 $this->info("No tables found in database '{$dbName}'");
                 return false;
             }
-            
-            // Display tables and their columns
-            $this->write("\nTables in database '{$dbName}':\n", CliColor::Yellow);
-            foreach ($tables as $table) {
-                $this->write("\nTable: {$table}\n", CliColor::Green);
-                
-                // Get columns for this table
-                $stmt = $pdo->query("SHOW COLUMNS FROM `{$table}`");
-                if ($stmt === false) {
-                    $this->warning("Failed to get columns for table: {$table}");
-                    return false;
-                }
-                $columns = $stmt->fetchAll(\PDO::FETCH_ASSOC);
-                
-                if (empty($columns)) {
-                    $this->write("  No columns found\n", CliColor::Red);
-                    return false;
-                }
-                
-                // Display column information
-                $this->write("  Columns:\n", CliColor::Blue);
-                foreach ($columns as $column) {
-                    $type = $column['Type'];
-                    $null = $column['Null'] === 'YES' ? 'NULL' : 'NOT NULL';
-                    $key = $column['Key'] ? "({$column['Key']})" : '';
-                    $default = $column['Default'] !== null ? "DEFAULT {$column['Default']}" : '';
-                    $extra = $column['Extra'] ? " {$column['Extra']}" : '';
-                    
-                    $columnInfo = sprintf(
-                        "    - %s: %s %s %s %s %s",
-                        $column['Field'],
-                        $type,
-                        $null,
-                        $key,
-                        $default,
-                        $extra
-                    );
-                    $this->write(trim($columnInfo) . "\n", CliColor::White);
-                }
-            }
-            $this->write("\n");
-            return true;
+
+            return $this->displayTables($pdo, $dbName, $tables);
         } catch (\Exception $e) {
             $this->error("Failed to list tables: " . $e->getMessage());
             return false;
         }
     }
-} 
+
+    protected function resolveDatabaseName(): ?string
+    {
+        $dbName = $_ENV['DB_NAME'] ?? null;
+
+        if (!$dbName || !is_string($dbName)) {
+            return null;
+        }
+
+        return $dbName;
+    }
+
+    /**
+     * @return list<string>|false
+     */
+    protected function fetchTableNames(\PDO $pdo, string $dbName): array|false
+    {
+        $stmt = $pdo->query("SHOW TABLES FROM `{$dbName}`");
+        if ($stmt === false) {
+            return false;
+        }
+
+        $tables = $stmt->fetchAll(\PDO::FETCH_COLUMN);
+        $names = [];
+        foreach ($tables as $table) {
+            if (is_string($table)) {
+                $names[] = $table;
+            }
+        }
+
+        return $names;
+    }
+
+    /**
+     * @return list<array<string, mixed>>|false
+     */
+    protected function fetchColumns(\PDO $pdo, string $table): array|false
+    {
+        $stmt = $pdo->query("SHOW COLUMNS FROM `{$table}`");
+        if ($stmt === false) {
+            return false;
+        }
+
+        $columns = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+
+        return array_values($columns);
+    }
+
+    /**
+     * @param array<string, mixed> $column
+     */
+    protected function formatColumnLine(array $column): string
+    {
+        $field = isset($column['Field']) && is_string($column['Field']) ? $column['Field'] : '';
+        $type = isset($column['Type']) && is_string($column['Type']) ? $column['Type'] : '';
+        $nullFlag = isset($column['Null']) && is_string($column['Null']) ? $column['Null'] : '';
+        $null = $nullFlag === 'YES' ? 'NULL' : 'NOT NULL';
+        $keyValue = isset($column['Key']) && is_string($column['Key']) ? $column['Key'] : '';
+        $key = $keyValue !== '' ? "({$keyValue})" : '';
+        $defaultValue = $column['Default'] ?? null;
+        $default = is_string($defaultValue) || is_int($defaultValue) || is_float($defaultValue)
+            ? 'DEFAULT ' . (string) $defaultValue
+            : '';
+        $extraValue = isset($column['Extra']) && is_string($column['Extra']) ? $column['Extra'] : '';
+        $extra = $extraValue !== '' ? " {$extraValue}" : '';
+
+        $columnInfo = sprintf(
+            "    - %s: %s %s %s %s %s",
+            $field,
+            $type,
+            $null,
+            $key,
+            $default,
+            $extra
+        );
+
+        return trim($columnInfo);
+    }
+
+    /**
+     * @param list<string> $tables
+     */
+    protected function displayTables(\PDO $pdo, string $dbName, array $tables): bool
+    {
+        $this->write("\nTables in database '{$dbName}':\n", CliColor::Yellow);
+
+        foreach ($tables as $table) {
+            $this->write("\nTable: {$table}\n", CliColor::Green);
+
+            $columns = $this->fetchColumns($pdo, $table);
+            if ($columns === false) {
+                $this->warning("Failed to get columns for table: {$table}");
+
+                return false;
+            }
+
+            if ($columns === []) {
+                $this->write("  No columns found\n", CliColor::Red);
+
+                return false;
+            }
+
+            $this->write("  Columns:\n", CliColor::Blue);
+            foreach ($columns as $column) {
+                $this->write($this->formatColumnLine($column) . "\n", CliColor::White);
+            }
+        }
+
+        $this->write("\n");
+
+        return true;
+    }
+}
