@@ -17,7 +17,7 @@ class DbInit extends Command
             if(!$pdo){
                 return false;
             }   
-            $dbName = $_ENV['DB_NAME'];
+            $dbName = $_ENV['DB_NAME'] ?? null;
             if (!is_string($dbName)) {
                 $this->error("Database name not found in environment variables");
                 return false;

@@ -18,7 +18,7 @@ class SetAdmin extends Command
      * @param string $prompt
      * @return string
      */
-    private function readInput(string $prompt): string
+    protected function readInput(string $prompt): string
     {
         echo $prompt;
         $handle = fopen("php://stdin", "r");
@@ -36,7 +36,7 @@ class SetAdmin extends Command
      * @param string $prompt
      * @return string
      */
-    private function readPassword(string $prompt): string
+    protected function readPassword(string $prompt): string
     {
         echo $prompt;
         
@@ -67,12 +67,23 @@ class SetAdmin extends Command
         return filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
     }
 
+    protected function newDbInit(): DbInit
+    {
+        return new DbInit();
+    }
+
+    /**
+     * @param array<int, mixed> $args
+     */
+    protected function newDbMigrate(array $args): DbMigrate
+    {
+        return new DbMigrate($args);
+    }
+
     /**
      * Check if database is initialized, if not ask user to initialize it
-     * 
-     * @return bool
      */
-    private function ensureDatabaseInitialized(): bool
+    protected function ensureDatabaseInitialized(): bool
     {
         // First, try to connect as root to check if database exists
         $pdoRoot = DbConnect::connectAsRoot();
@@ -116,7 +127,7 @@ class SetAdmin extends Command
             if ($response === '' || $response === 'y' || $response === 'yes') {
                 // Initialize database
                 $this->info("Initializing database...");
-                $dbInit = new DbInit();
+                $dbInit = $this->newDbInit();
                 if (!$dbInit->execute()) {
                     $this->error("Failed to initialize database");
                     return false;
@@ -138,7 +149,7 @@ class SetAdmin extends Command
      * 
      * @return bool
      */
-    private function ensureUserTableMigrated(): bool
+    protected function ensureUserTableMigrated(): bool
     {
         ProjectHelper::loadEnv();
         $pdo = DbConnect::connect();
@@ -178,7 +189,7 @@ class SetAdmin extends Command
         if ($response === '' || $response === 'y' || $response === 'yes') {
             // Migrate UserTable
             $this->info("Migrating UserTable...");
-            $dbMigrate = new DbMigrate(['UserTable']);
+            $dbMigrate = $this->newDbMigrate(['UserTable']);
             if (!$dbMigrate->execute()) {
                 $this->error("Failed to migrate UserTable");
                 return false;
@@ -305,10 +316,7 @@ class SetAdmin extends Command
                 DatabaseManagerFactory::resetInstance();
             }
             
-            // Create UserModel instance and call firstAdminUser
-            /** @phpstan-ignore-next-line */
             $userModel = new UserModel();
-            /** @phpstan-ignore-next-line */
             $response = $userModel->firstAdminUser($email, $password, $name);
             
             // Check response

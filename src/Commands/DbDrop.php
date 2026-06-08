@@ -11,6 +11,21 @@ use PDO;
  */
 class DbDrop extends Command
 {
+    protected function readConfirmation(): string
+    {
+        $this->write("\nAre you sure you want to drop this table? (yes/no): ", CliColor::Yellow);
+        $handle = fopen('php://stdin', 'r');
+        if ($handle === false) {
+            $this->error('Failed to open stdin');
+
+            return '';
+        }
+        $line = fgets($handle);
+        fclose($handle);
+
+        return $line !== false ? trim($line) : '';
+    }
+
     public function execute(): bool
     {
         ProjectHelper::loadEnv();
@@ -33,15 +48,7 @@ class DbDrop extends Command
                 $this->error("\nWARNING: This will permanently delete the table '{$tableName}' and all its data!");
                 $this->error("This action cannot be undone.");
 
-                $this->write("\nAre you sure you want to drop this table? (yes/no): ", CliColor::Yellow);
-                $handle = fopen("php://stdin", "r");
-                if ($handle === false) {
-                    $this->error("Failed to open stdin");
-                    return false;
-                }
-                $line = fgets($handle);
-                fclose($handle);
-                $confirm = $line !== false ? trim($line) : '';
+                $confirm = $this->readConfirmation();
 
                 if (strtolower($confirm) !== 'yes') {
                     $this->info("Operation cancelled.");

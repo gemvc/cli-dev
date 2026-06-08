@@ -35,7 +35,13 @@ class DbUnique extends Command
         }
 
         // Parse table and columns from argument (format: table/col1,col2,...)
-        list($table, $columns) = explode('/', $this->args[0]);
+        $argument = $this->args[0];
+        if (!str_contains($argument, '/')) {
+            $this->error("Invalid format. Use: gemvc db:unique table/col1,col2,...");
+            return false;
+        }
+
+        [$table, $columns] = explode('/', $argument, 2);
         $columnList = array_map('trim', explode(',', $columns));
         // @phpstan-ignore-next-line
         if (!$table || count($columnList) === 0) {

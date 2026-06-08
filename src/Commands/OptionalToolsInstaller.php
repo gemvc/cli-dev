@@ -60,14 +60,10 @@ class OptionalToolsInstaller extends Command
         );
         
         $this->write("\nInstall PHPStan? (y/N): ", CliColor::Blue);
-        $handle = fopen("php://stdin", "r");
-        if ($handle === false) {
-            $this->error("Failed to open stdin");
+        $choice = $this->readStdinLine();
+        if ($choice === false) {
             return;
         }
-        $line = fgets($handle);
-        fclose($handle);
-        $choice = $line !== false ? trim($line) : '';
         
         if (strtolower($choice) === 'y') {
             $this->installPhpstan();
@@ -92,15 +88,10 @@ class OptionalToolsInstaller extends Command
         $this->write("  [2] Pest - Modern, expressive testing framework\n", CliColor::White);
         $this->write("  [3] Skip - No testing framework\n", CliColor::White);
         $this->write("\nEnter choice (1-3): ", CliColor::Blue);
-        
-        $handle = fopen("php://stdin", "r");
-        if ($handle === false) {
-            $this->error("Failed to open stdin");
+        $choice = $this->readStdinLine();
+        if ($choice === false) {
             return;
         }
-        $line = fgets($handle);
-        fclose($handle);
-        $choice = $line !== false ? trim($line) : '';
         
         switch ($choice) {
             case '1':
@@ -118,6 +109,20 @@ class OptionalToolsInstaller extends Command
         }
     }
     
+    protected function readStdinLine(): string|false
+    {
+        $handle = fopen('php://stdin', 'r');
+        if ($handle === false) {
+            $this->error('Failed to open stdin');
+
+            return false;
+        }
+        $line = fgets($handle);
+        fclose($handle);
+
+        return $line !== false ? trim($line) : '';
+    }
+
     /**
      * Display tool installation prompt
      */
@@ -175,7 +180,7 @@ class OptionalToolsInstaller extends Command
     /**
      * Run composer command
      */
-    private function runComposerCommand(string $command): void
+    protected function runComposerCommand(string $command): void
     {
         $composerJsonPath = $this->basePath . '/composer.json';
         if (!file_exists($composerJsonPath)) {
@@ -194,56 +199,62 @@ class OptionalToolsInstaller extends Command
         
         $currentDir = getcwd();
         if ($currentDir === false) {
-            throw new \RuntimeException("Could not get current directory");
+            throw new \RuntimeException('Could not get current directory');
         }
         if (chdir($this->basePath) === false) {
             throw new \RuntimeException("Could not change to directory: {$this->basePath}");
         }
-        
+
         exec("composer {$enhancedCommand} 2>&1", $output, $returnCode);
-        
+
         if (chdir($currentDir) === false) {
             throw new \RuntimeException("Could not restore directory: {$currentDir}");
         }
         
         if ($returnCode !== 0) {
-            $this->warning("Failed to run composer command. Error output:");
-            foreach ($output as $line) {
-                $this->write("  {$line}\n", CliColor::Red);
-            }
-            
-            // Check for specific errors and provide helpful suggestions
-            $errorText = implode("\n", $output);
-            
-            // Extract package name from command (e.g., "require --dev phpstan/phpstan" -> "phpstan/phpstan")
-            $packageName = '';
-            if (preg_match('/require\s+--dev\s+([^\s]+)/', $command, $matches)) {
-                $packageName = $matches[1];
-            }
-            
-            if (strpos($errorText, 'Permission denied') !== false || strpos($errorText, 'Failed to open stream') !== false) {
-                $this->info("\nPermission Issue Detected:");
-                $this->info("   The vendor/bin/gemvc file might be locked or in use.");
-                $this->info("   Solutions:");
-                $this->info("   1. Close any terminals/processes using the gemvc command");
-                $this->info("   2. Run this terminal as Administrator");
-                if ($packageName) {
-                    $this->info("   3. Manually install: composer require --dev {$packageName}");
-                }
-            }
-            
-            if (strpos($errorText, 'Downgrading') !== false || strpos($errorText, 'version conflict') !== false) {
-                $this->info("\nVersion Conflict Detected:");
-                $this->info("   There's a version conflict with gemvc/library.");
-                $this->info("   Solutions:");
-                $this->info("   1. Update gemvc/library first: composer update gemvc/library");
-                if ($packageName) {
-                    $this->info("   2. Or manually install: composer require --dev {$packageName} --with-all-dependencies");
-                }
-            }
-            
-            throw new \RuntimeException("Composer command failed");
+            $this->handleComposerFailure($output, $command);
         }
+    }
+
+    /**
+     * @param array<int, string> $output
+     */
+    protected function handleComposerFailure(array $output, string $command): void
+    {
+        $this->warning('Failed to run composer command. Error output:');
+        foreach ($output as $line) {
+            $this->write("  {$line}\n", CliColor::Red);
+        }
+
+        $errorText = implode("\n", $output);
+
+        $packageName = '';
+        if (preg_match('/require\s+--dev\s+([^\s]+)/', $command, $matches)) {
+            $packageName = $matches[1];
+        }
+
+        if (strpos($errorText, 'Permission denied') !== false || strpos($errorText, 'Failed to open stream') !== false) {
+            $this->info("\nPermission Issue Detected:");
+            $this->info('   The vendor/bin/gemvc file might be locked or in use.');
+            $this->info('   Solutions:');
+            $this->info('   1. Close any terminals/processes using the gemvc command');
+            $this->info('   2. Run this terminal as Administrator');
+            if ($packageName) {
+                $this->info("   3. Manually install: composer require --dev {$packageName}");
+            }
+        }
+
+        if (strpos($errorText, 'Downgrading') !== false || strpos($errorText, 'version conflict') !== false) {
+            $this->info("\nVersion Conflict Detected:");
+            $this->info("   There's a version conflict with gemvc/library.");
+            $this->info('   Solutions:');
+            $this->info('   1. Update gemvc/library first: composer update gemvc/library');
+            if ($packageName) {
+                $this->info("   2. Or manually install: composer require --dev {$packageName} --with-all-dependencies");
+            }
+        }
+
+        throw new \RuntimeException('Composer command failed');
     }
     
     /**
@@ -318,7 +329,7 @@ class OptionalToolsInstaller extends Command
     /**
      * Initialize Pest
      */
-    private function initializePest(): void
+    protected function initializePest(): void
     {
         $this->info("Initializing Pest...");
         

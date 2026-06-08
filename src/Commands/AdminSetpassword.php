@@ -4,7 +4,6 @@ namespace Gemvc\CLI\Commands;
 
 use Gemvc\CLI\Command;
 use Gemvc\Helper\ProjectHelper;
-use Gemvc\Helper\CryptHelper;
 
 class AdminSetpassword extends Command
 {
@@ -17,8 +16,10 @@ class AdminSetpassword extends Command
      */
     private function updateEnvFile(string $envPath, string $password): bool
     {
-        if (!file_exists($envPath)) {
-            $this->error(".env file not found at: {$envPath}");
+        if (!is_file($envPath)) {
+            $this->error(!file_exists($envPath)
+                ? ".env file not found at: {$envPath}"
+                : "Failed to read .env file");
             return false;
         }
 
@@ -61,7 +62,7 @@ class AdminSetpassword extends Command
      * @param string $prompt
      * @return string
      */
-    private function readPassword(string $prompt): string
+    protected function readPassword(string $prompt): string
     {
         echo $prompt;
         

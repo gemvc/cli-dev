@@ -52,8 +52,15 @@
     },
     "autoload-dev": {
         "psr-4": {
-            "Gemvc\\CliDev\\Tests\\": "tests/"
-        }
+            "Gemvc\\CliDev\\Tests\\": "tests/",
+            "Gemvc\\Helper\\": "stubs/Gemvc/Helper/",
+            "Gemvc\\Database\\": "stubs/Gemvc/Database/",
+            "Gemvc\\CLI\\Commands\\": "stubs/Gemvc/CLI/Commands/",
+            "App\\": "stubs/App/"
+        },
+        "classmap": [
+            "tests/Support/Commands/TestableCommands.php"
+        ]
     },
     "extra": {
         "branch-alias": {
@@ -68,6 +75,7 @@
     "prefer-stable": true,
     "scripts": {
         "test": "phpunit",
+        "test:coverage": "phpunit --coverage-text --colors=never",
         "phpstan": "phpstan analyse -c phpstan.neon --memory-limit=256M"
     }
 }
