@@ -102,7 +102,7 @@ class ProjectHelper
 
     public static function loadEnv(): void
     {
-        if (self::$testRootDir !== null) {
+        if (self::$testRootDir !== null && (self::$testReplaceEnv || self::$testEnv !== [])) {
             $merged = self::$testReplaceEnv
                 ? self::$testEnv
                 : array_merge(['DB_NAME' => 'test_db', 'DB_HOST' => 'localhost'], self::$testEnv);

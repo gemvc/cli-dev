@@ -423,8 +423,12 @@ final class AdditionalCoverageTest extends CommandTestCase
     public function testCreateServiceHandlesWriteFailure(): void
     {
         $this->seedTemplates();
-        $command = $this->makeCommand(\Gemvc\CLI\Commands\CreateService::class, ['User'], []);
-        $this->setProperty($command, 'basePath', '/root/not-writable');
+        $command = new class(['User'], []) extends \Gemvc\CliDev\Tests\Support\Commands\TestableCreateService {
+            protected function determineProjectRoot(): string
+            {
+                return '/root/not-writable';
+            }
+        };
         $this->expectingPhpWarnings(fn () => $this->assertFalse($command->execute()));
     }
 
@@ -678,8 +682,12 @@ final class AdditionalCoverageTest extends CommandTestCase
     public function testCreateTableHandlesWriteErrors(): void
     {
         $this->seedTemplates();
-        $command = $this->makeCommand(\Gemvc\CLI\Commands\CreateTable::class, ['Bad'], []);
-        $this->setProperty($command, 'basePath', '/cannot-create-here');
+        $command = new class(['Bad'], []) extends \Gemvc\CliDev\Tests\Support\Commands\TestableCreateTable {
+            protected function determineProjectRoot(): string
+            {
+                return '/cannot-create-here';
+            }
+        };
         $this->expectingPhpWarnings(fn () => $this->assertFalse($command->execute()));
     }
 
@@ -1026,8 +1034,12 @@ final class AdditionalCoverageTest extends CommandTestCase
 
     public function testCreateControllerHandlesGenerationErrors(): void
     {
-        $command = $this->makeCommand(\Gemvc\CLI\Commands\CreateController::class, ['Fail'], []);
-        $this->setProperty($command, 'basePath', '/not-writable');
+        $command = new class(['Fail'], []) extends \Gemvc\CliDev\Tests\Support\Commands\TestableCreateController {
+            protected function determineProjectRoot(): string
+            {
+                return '/not-writable';
+            }
+        };
         $this->expectingPhpWarnings(fn () => $this->assertFalse($command->execute()));
     }
 

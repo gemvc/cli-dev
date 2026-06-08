@@ -18,30 +18,36 @@ use Gemvc\CLI\Commands\DbList;
 use Gemvc\CLI\Commands\DbUnique;
 use Gemvc\CLI\Commands\SetAdmin;
 use Gemvc\CliDev\Tests\Support\SuppressesCliExit;
+use Gemvc\CliDev\Tests\Support\UsesParentCommandDirectories;
 
-final class TestableCreateService extends CreateService
+class TestableCreateService extends CreateService
 {
     use SuppressesCliExit;
+    use UsesParentCommandDirectories;
 }
 
-final class TestableCreateController extends CreateController
+class TestableCreateController extends CreateController
 {
     use SuppressesCliExit;
+    use UsesParentCommandDirectories;
 }
 
-final class TestableCreateModel extends CreateModel
+class TestableCreateModel extends CreateModel
 {
     use SuppressesCliExit;
+    use UsesParentCommandDirectories;
 }
 
-final class TestableCreateTable extends CreateTable
+class TestableCreateTable extends CreateTable
 {
     use SuppressesCliExit;
+    use UsesParentCommandDirectories;
 }
 
-final class TestableCreateCrud extends CreateCrud
+class TestableCreateCrud extends CreateCrud
 {
     use SuppressesCliExit;
+    use UsesParentCommandDirectories;
 
     protected function newCreateService(array $args, array $options): CreateService
     {
@@ -49,9 +55,10 @@ final class TestableCreateCrud extends CreateCrud
     }
 }
 
-final class TestableCreateCrudBase extends CreateCrud
+class TestableCreateCrudBase extends CreateCrud
 {
     use SuppressesCliExit;
+    use UsesParentCommandDirectories;
 }
 
 final class TestableDbInit extends DbInit

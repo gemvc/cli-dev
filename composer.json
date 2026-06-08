@@ -76,6 +76,9 @@
     "prefer-stable": true,
     "scripts": {
         "test": "phpunit",
+        "test:unit": "phpunit --testsuite unit",
+        "test:feature": "phpunit --testsuite feature",
+        "test:feature:coverage": "phpunit --testsuite feature --coverage-text --colors=never",
         "test:coverage": "phpunit --coverage-text --colors=never",
         "phpstan": "phpstan analyse -c phpstan.neon --memory-limit=256M"
     }
