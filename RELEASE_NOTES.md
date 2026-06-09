@@ -1,10 +1,10 @@
 # gemvc/cli-dev Release Notes
 
-## Version 1.1.0 — Refactor, tests, and stability
+## Version 1.1.1 — Refactor, tests, and stability
 
 **Release Date**: 9 June 2026  
 **Type**: Minor release  
-**Tag**: `1.1.0`
+**Tag**: `1.1.1`
 
 ### Overview
 
