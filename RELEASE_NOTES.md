@@ -1,16 +1,21 @@
 # gemvc/cli-dev Release Notes
 
-## Version 1.1.1 — Refactor, tests, and stability
+## Version 1.1.2 — Refactor, tests, and stability
 
 **Release Date**: 9 June 2026  
 **Type**: Minor release  
-**Tag**: `1.1.1`
+**Tag**: `1.1.2`
 
 ### Overview
 
 Internal refactor of all CLI commands into testable `protected` helpers without changing the public command API (`execute(): bool`, class names, and existing hooks). Expanded unit and feature test suites, PHPStan level 9 clean, and fixes for edge cases in database and admin commands.
 
 **No application changes required** — same `vendor/bin/gemvc` entry point and command names.
+
+### Packaging
+
+- `composer.json` `version` set to `1.1.2` so Packagist accepts the git tag
+- `extra.branch-alias.dev-main` updated to `1.1.x-dev`
 
 ### Improvements
 
