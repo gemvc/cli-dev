@@ -4,9 +4,8 @@ declare(strict_types=1);
 
 namespace Gemvc\CliDev\Tests\Feature;
 
-use Gemvc\CLI\Commands\AdminSetpassword;
+use Gemvc\CliDev\Tests\Support\Commands\TestableAdminSetpassword;
 use Gemvc\CliDev\Tests\Support\FeatureTestCase;
-use Gemvc\CliDev\Tests\Support\SuppressesCliExit;
 use Gemvc\Helper\ProjectHelper;
 
 final class AdminFeatureTest extends FeatureTestCase
@@ -16,20 +15,16 @@ final class AdminFeatureTest extends FeatureTestCase
         ProjectHelper::reset();
         ProjectHelper::configure($this->projectRoot);
 
-        $command = new class([], []) extends AdminSetpassword {
-            use SuppressesCliExit;
-
+        $result = $this->runCommand(new class([], []) extends TestableAdminSetpassword {
             private int $calls = 0;
 
             protected function readPassword(string $prompt): string
             {
                 return (++$this->calls === 1) ? 'feature-secret' : 'feature-secret';
             }
-        };
+        });
 
-        ob_start();
-        $this->assertTrue($command->execute());
-        ob_end_clean();
+        $this->assertTrue($result->success);
 
         $env = (string) file_get_contents($this->projectRoot . '/.env');
         $this->assertStringContainsString('ADMIN_PASSWORD="feature-secret"', $env);
@@ -39,18 +34,14 @@ final class AdminFeatureTest extends FeatureTestCase
     {
         unlink($this->projectRoot . '/.env');
 
-        $command = new class([], []) extends AdminSetpassword {
-            use SuppressesCliExit;
-
+        $result = $this->runCommand(new class([], []) extends TestableAdminSetpassword {
             protected function readPassword(string $prompt): string
             {
                 return 'secret';
             }
-        };
+        });
 
-        ob_start();
-        $this->assertFalse($command->execute());
-        ob_end_clean();
+        $this->assertFalse($result->success);
     }
 
     public function testSetPasswordRejectsMismatchedConfirmation(): void
@@ -58,22 +49,17 @@ final class AdminFeatureTest extends FeatureTestCase
         ProjectHelper::reset();
         ProjectHelper::configure($this->projectRoot);
 
-        $command = new class([], []) extends AdminSetpassword {
-            use SuppressesCliExit;
-
+        $result = $this->runCommand(new class([], []) extends TestableAdminSetpassword {
             private int $calls = 0;
 
             protected function readPassword(string $prompt): string
             {
                 return (++$this->calls === 1) ? 'one' : 'two';
             }
-        };
+        });
 
-        ob_start();
-        $this->assertFalse($command->execute());
-        $output = (string) ob_get_clean();
-
-        $this->assertStringContainsString('Passwords do not match', $output);
+        $this->assertFalse($result->success);
+        $this->assertStringContainsString('Passwords do not match', $result->output);
     }
 
     public function testSetPasswordRejectsEmptyPassword(): void
@@ -81,19 +67,52 @@ final class AdminFeatureTest extends FeatureTestCase
         ProjectHelper::reset();
         ProjectHelper::configure($this->projectRoot);
 
-        $command = new class([], []) extends AdminSetpassword {
-            use SuppressesCliExit;
-
+        $result = $this->runCommand(new class([], []) extends TestableAdminSetpassword {
             protected function readPassword(string $prompt): string
             {
                 return '';
             }
-        };
+        });
 
-        ob_start();
-        $this->assertFalse($command->execute());
-        $output = (string) ob_get_clean();
+        $this->assertFalse($result->success);
+        $this->assertStringContainsString('Password cannot be empty', $result->output);
+    }
 
-        $this->assertStringContainsString('Password cannot be empty', $output);
+    public function testSetPasswordViaCommandRunner(): void
+    {
+        ProjectHelper::reset();
+        ProjectHelper::configure($this->projectRoot);
+
+        $result = $this->runCommand(new class([], []) extends TestableAdminSetpassword {
+            private int $calls = 0;
+
+            protected function readPassword(string $prompt): string
+            {
+                return (++$this->calls === 1) ? 'runner-secret' : 'runner-secret';
+            }
+        });
+
+        $this->assertTrue($result->success);
+        $this->assertStringContainsString('ADMIN_PASSWORD="runner-secret"', (string) file_get_contents($this->projectRoot . '/.env'));
+    }
+
+    public function testSetPasswordReplacesExistingAdminPassword(): void
+    {
+        ProjectHelper::reset();
+        ProjectHelper::configure($this->projectRoot);
+        file_put_contents($this->projectRoot . '/.env', "APP_ENV=dev\nADMIN_PASSWORD=\"old\"\n");
+
+        $result = $this->runCommand(new class([], []) extends TestableAdminSetpassword {
+            private int $calls = 0;
+
+            protected function readPassword(string $prompt): string
+            {
+                return (++$this->calls === 1) ? 'new-secret' : 'new-secret';
+            }
+        });
+
+        $this->assertTrue($result->success);
+        $this->assertStringContainsString('ADMIN_PASSWORD="new-secret"', (string) file_get_contents($this->projectRoot . '/.env'));
+        $this->assertStringNotContainsString('old', (string) file_get_contents($this->projectRoot . '/.env'));
     }
 }

@@ -18,35 +18,41 @@ use Gemvc\CLI\Commands\DbList;
 use Gemvc\CLI\Commands\DbUnique;
 use Gemvc\CLI\Commands\SetAdmin;
 use Gemvc\CliDev\Tests\Support\SuppressesCliExit;
+use Gemvc\CliDev\Tests\Support\UsesNonInteractiveFileSystem;
 use Gemvc\CliDev\Tests\Support\UsesParentCommandDirectories;
 
 class TestableCreateService extends CreateService
 {
     use SuppressesCliExit;
+    use UsesNonInteractiveFileSystem;
     use UsesParentCommandDirectories;
 }
 
 class TestableCreateController extends CreateController
 {
     use SuppressesCliExit;
+    use UsesNonInteractiveFileSystem;
     use UsesParentCommandDirectories;
 }
 
 class TestableCreateModel extends CreateModel
 {
     use SuppressesCliExit;
+    use UsesNonInteractiveFileSystem;
     use UsesParentCommandDirectories;
 }
 
 class TestableCreateTable extends CreateTable
 {
     use SuppressesCliExit;
+    use UsesNonInteractiveFileSystem;
     use UsesParentCommandDirectories;
 }
 
 class TestableCreateCrud extends CreateCrud
 {
     use SuppressesCliExit;
+    use UsesNonInteractiveFileSystem;
     use UsesParentCommandDirectories;
 
     protected function newCreateService(array $args, array $options): CreateService
@@ -58,45 +64,46 @@ class TestableCreateCrud extends CreateCrud
 class TestableCreateCrudBase extends CreateCrud
 {
     use SuppressesCliExit;
+    use UsesNonInteractiveFileSystem;
     use UsesParentCommandDirectories;
 }
 
-final class TestableDbInit extends DbInit
+class TestableDbInit extends DbInit
 {
     use SuppressesCliExit;
 }
 
-final class TestableDbMigrate extends DbMigrate
+class TestableDbMigrate extends DbMigrate
 {
     use SuppressesCliExit;
 }
 
-final class TestableDbList extends DbList
+class TestableDbList extends DbList
 {
     use SuppressesCliExit;
 }
 
-final class TestableDbDescribe extends DbDescribe
+class TestableDbDescribe extends DbDescribe
 {
     use SuppressesCliExit;
 }
 
-final class TestableDbDrop extends DbDrop
+class TestableDbDrop extends DbDrop
 {
     use SuppressesCliExit;
 }
 
-final class TestableDbUnique extends DbUnique
+class TestableDbUnique extends DbUnique
 {
     use SuppressesCliExit;
 }
 
-final class TestableAdminSetpassword extends AdminSetpassword
+class TestableAdminSetpassword extends AdminSetpassword
 {
     use SuppressesCliExit;
 }
 
-final class TestableSetAdmin extends SetAdmin
+class TestableSetAdmin extends SetAdmin
 {
     use SuppressesCliExit;
 }

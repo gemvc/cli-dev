@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace Gemvc\CliDev\Tests\Feature;
 
+use Gemvc\CLI\Commands\DbConnect;
+use Gemvc\CliDev\Tests\Support\Commands\TestableDbDrop;
 use Gemvc\CliDev\Tests\Support\FeatureTestCase;
 use Gemvc\CliDev\Tests\Support\PdoMock;
-use Gemvc\CLI\Commands\DbConnect;
 use Gemvc\Helper\ProjectHelper;
 use PHPUnit\Framework\MockObject\MockObject;
 
@@ -220,6 +221,165 @@ final class DatabaseFeatureTest extends FeatureTestCase
         $result = $this->runner->run('db:init');
 
         $this->assertFalse($result->success);
+    }
+
+    public function testDbInitFailsWhenDatabaseNameMissing(): void
+    {
+        ProjectHelper::reset();
+        ProjectHelper::configure($this->projectRoot, ['DB_NAME' => '']);
+        DbConnect::configure(null, PdoMock::create($this));
+
+        $result = $this->runner->run('db:init');
+
+        $this->assertFalse($result->success);
+        $this->assertStringContainsString('Database name not found', $result->output);
+    }
+
+    public function testDbListFailsWhenDatabaseNameMissing(): void
+    {
+        ProjectHelper::reset();
+        ProjectHelper::configure($this->projectRoot, ['DB_NAME' => '']);
+
+        $result = $this->runner->run('db:list');
+
+        $this->assertFalse($result->success);
+        $this->assertStringContainsString('Database name not found', $result->output);
+    }
+
+    public function testDbListFailsWhenConnectionUnavailable(): void
+    {
+        $this->useProjectEnv();
+        DbConnect::configure(null);
+
+        $result = $this->runner->run('db:list');
+
+        $this->assertFalse($result->success);
+    }
+
+    public function testDbDescribeFailsWhenDatabaseNameMissing(): void
+    {
+        ProjectHelper::reset();
+        ProjectHelper::configure($this->projectRoot, ['DB_NAME' => '']);
+
+        $result = $this->runner->run('db:describe', ['users']);
+
+        $this->assertFalse($result->success);
+        $this->assertStringContainsString('Failed to describe table', $result->output);
+    }
+
+    public function testDbDescribeShowsEmptySections(): void
+    {
+        $this->useProjectEnv();
+
+        $pdo = PdoMock::create($this, [
+            'SHOW TABLES FROM' => [['Tables_in_test_db (empty_tbl)' => 'empty_tbl']],
+            'SHOW COLUMNS' => [],
+            'SHOW INDEX' => [],
+            'KEY_COLUMN_USAGE' => [],
+            'TABLE_ROWS' => false,
+            'ENGINE' => false,
+        ]);
+        DbConnect::configure($pdo);
+
+        $result = $this->runner->run('db:describe', ['empty_tbl']);
+
+        $this->assertTrue($result->success);
+        $this->assertStringContainsString('No columns found', $result->output);
+        $this->assertStringContainsString('No indexes found', $result->output);
+        $this->assertStringContainsString('No foreign keys found', $result->output);
+    }
+
+    public function testDbUniqueRequiresArgument(): void
+    {
+        $result = $this->runner->run('db:unique', []);
+
+        $this->assertFalse($result->success);
+        $this->assertStringContainsString('Usage: gemvc db:unique', $result->output);
+    }
+
+    public function testDbUniqueFailsWhenConnectionUnavailable(): void
+    {
+        $this->useProjectEnv();
+        DbConnect::configure(null);
+
+        $result = $this->runner->run('db:unique', ['users/email']);
+
+        $this->assertFalse($result->success);
+        $this->assertStringContainsString('Could not connect', $result->output);
+    }
+
+    public function testDbUniqueAddsMultiColumnConstraint(): void
+    {
+        $this->useProjectEnv();
+
+        /** @var \PDO&MockObject $pdo */
+        $pdo = $this->getMockBuilder(\PDO::class)->disableOriginalConstructor()->getMock();
+        $pdo->method('query')->willReturn(PdoMock::statement($this, []));
+        $pdo->method('exec')->willReturn(1);
+        DbConnect::configure($pdo);
+
+        $result = $this->runner->run('db:unique', ['users/email,name']);
+
+        $this->assertTrue($result->success);
+        $this->assertStringContainsString('email, name', $result->output);
+    }
+
+    public function testDbDropReportsMissingTable(): void
+    {
+        $this->useProjectEnv();
+        DbConnect::configure(PdoMock::create($this, ['SHOW TABLES LIKE' => []]));
+
+        $result = $this->runner->run('db:drop', ['missing', '--force']);
+
+        $this->assertFalse($result->success);
+        $this->assertStringContainsString('does not exist', $result->output);
+    }
+
+    public function testDbDropFailsWhenConnectionUnavailable(): void
+    {
+        $this->useProjectEnv();
+        DbConnect::configure(null);
+
+        $result = $this->runner->run('db:drop', ['users', '--force']);
+
+        $this->assertFalse($result->success);
+        $this->assertStringContainsString('Failed to connect', $result->output);
+    }
+
+    public function testDbDropWithConfirmation(): void
+    {
+        $this->useProjectEnv();
+
+        $pdo = PdoMock::create($this, [
+            'SHOW TABLES LIKE' => [['Tables_in_test_db (users)' => 'users']],
+            'SHOW CREATE TABLE' => [['Create Table' => 'CREATE TABLE `users` (id INT)']],
+        ]);
+        DbConnect::configure($pdo);
+
+        $result = $this->runCommand(new class(['users']) extends TestableDbDrop {
+            protected function readConfirmation(): string
+            {
+                return 'yes';
+            }
+        });
+
+        $this->assertTrue($result->success);
+        $this->assertStringContainsString('dropped successfully', $result->output);
+    }
+
+    public function testDbDropCancelsWhenNotConfirmed(): void
+    {
+        $this->useProjectEnv();
+
+        $result = $this->runCommand(new class(['users']) extends TestableDbDrop {
+            protected function readConfirmation(): string
+            {
+                return 'no';
+            }
+        });
+
+        $this->assertFalse($result->success);
+        $this->assertStringContainsString('Operation cancelled', $result->output);
     }
 
     private function useProjectEnv(): void

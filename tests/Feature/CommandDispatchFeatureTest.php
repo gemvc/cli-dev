@@ -48,15 +48,31 @@ final class CommandDispatchFeatureTest extends FeatureTestCase
     public function testRunnerDispatchesAllCodegenCommands(): void
     {
         $smoke = [
-            ['create:service', ['Smoke']],
-            ['create:controller', ['Smoke']],
-            ['create:model', ['Smoke']],
-            ['create:table', ['Smoke']],
+            ['create:service', ['SmokeSvc']],
+            ['create:controller', ['SmokeCtl']],
+            ['create:model', ['SmokeMdl']],
+            ['create:table', ['SmokeTbl']],
+            ['create:crud', ['SmokeCrud']],
         ];
 
         foreach ($smoke as [$command, $args]) {
             $result = $this->runner->run($command, $args);
             $this->assertTrue($result->success, "Expected {$command} to succeed");
         }
+    }
+
+    public function testRunnerDispatchesAdminSetpassword(): void
+    {
+        $result = $this->runCommand(new class([], []) extends \Gemvc\CliDev\Tests\Support\Commands\TestableAdminSetpassword {
+            private int $calls = 0;
+
+            protected function readPassword(string $prompt): string
+            {
+                return (++$this->calls === 1) ? 'dispatch-secret' : 'dispatch-secret';
+            }
+        });
+
+        $this->assertTrue($result->success);
+        $this->assertStringContainsString('ADMIN_PASSWORD="dispatch-secret"', (string) file_get_contents($this->projectRoot . '/.env'));
     }
 }

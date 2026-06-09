@@ -99,6 +99,30 @@ final class CodeGenerationFeatureTest extends FeatureTestCase
         $this->assertStringContainsString('Controller name is required', $result->output);
     }
 
+    public function testCreateCrudRequiresName(): void
+    {
+        $result = $this->runner->run('create:crud', []);
+
+        $this->assertFalse($result->success);
+        $this->assertStringContainsString('Service name is required', $result->output);
+    }
+
+    public function testCreateModelRequiresName(): void
+    {
+        $result = $this->runner->run('create:model', []);
+
+        $this->assertFalse($result->success);
+        $this->assertStringContainsString('Model name is required', $result->output);
+    }
+
+    public function testCreateTableRequiresName(): void
+    {
+        $result = $this->runner->run('create:table', []);
+
+        $this->assertFalse($result->success);
+        $this->assertStringContainsString('Table name is required', $result->output);
+    }
+
     public function testUsesPackageTemplatesWhenProjectTemplatesMissing(): void
     {
         $this->removeDirectory($this->projectRoot . '/templates');

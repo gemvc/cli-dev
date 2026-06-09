@@ -58,6 +58,18 @@ abstract class FeatureTestCase extends TestCase
         parent::tearDown();
     }
 
+    protected function runCommand(object $command): CliRunResult
+    {
+        ob_start();
+        try {
+            $success = $command->execute();
+        } finally {
+            $output = (string) ob_get_clean();
+        }
+
+        return new CliRunResult($success, $output);
+    }
+
     protected function seedProject(): void
     {
         file_put_contents(
