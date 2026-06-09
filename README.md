@@ -4,7 +4,7 @@ Development CLI commands for the [GEMVC](https://gemvc.de) framework.
 
 Composer package: `gemvc/cli-dev`  
 GitHub repo: [gemvc/cli-dev](https://github.com/gemvc/cli-dev)  
-Current release: **1.0.0** (8 June 2026) — see [RELEASE_NOTES.md](RELEASE_NOTES.md)
+Current release: **1.1.0** (9 June 2026) — see [RELEASE_NOTES.md](RELEASE_NOTES.md)
 
 > **WARNING**
 >
@@ -36,6 +36,10 @@ Production migrations stay in the core library: `gemvc db:migrate TableClass`.
 
 `Gemvc\CLI\Commands\*` — unchanged from the monorepo layout.
 
+Shared internal traits (same namespace, not part of the public CLI surface):
+
+- `ResolvesDatabaseEnvironment` — DB env loading for `db:*` commands
+
 ## Dependencies
 
 - `gemvc/cli-base` — terminal I/O and codegen abstracts
@@ -52,8 +56,14 @@ gemvc/cli-dev  →  requires gemvc/library (no circular dependency)
 
 ```bash
 composer install
-composer test
-composer phpstan
+composer test              # unit + feature (223 tests)
+composer test:unit         # unit tests only
+composer test:feature      # feature tests (project-style runs)
+composer test:coverage     # full coverage report
+composer test:feature:coverage
+composer phpstan           # level 9
 ```
+
+Feature tests run commands against a seeded project under `build/feature-projects/` (`.env`, `composer.json`, templates). Unit tests use stubs in `stubs/` for library types not bundled in this package.
 
 See [CLI_DEV.md](CLI_DEV.md) for command reference.
