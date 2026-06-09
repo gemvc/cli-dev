@@ -4,7 +4,7 @@ Development CLI commands for the [GEMVC](https://gemvc.de) framework.
 
 Composer package: `gemvc/cli-dev`  
 GitHub repo: [gemvc/cli-dev](https://github.com/gemvc/cli-dev)  
-Current release: **1.1.0** (9 June 2026) — see [RELEASE_NOTES.md](RELEASE_NOTES.md)
+Current release: **1.1.2** (9 June 2026) — see [RELEASE_NOTES.md](RELEASE_NOTES.md)
 
 > **WARNING**
 >
