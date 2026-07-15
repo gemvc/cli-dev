@@ -69,6 +69,14 @@ class DbDescribe extends Command
 
     protected function tableExists(\PDO $pdo, string $dbName, string $tableName): bool
     {
+        $driver = strtolower($_ENV['DB_DRIVER'] ?? 'mysql');
+
+        if ($driver === 'pgsql') {
+            $stmt = $pdo->prepare("SELECT to_regclass(:tableName)");
+            $stmt->execute([':tableName' => $tableName]);
+            return $stmt->fetchColumn() !== false;
+        }
+
         $stmt = $pdo->prepare("SHOW TABLES FROM `{$dbName}` LIKE ?");
         $stmt->execute([$tableName]);
 
@@ -90,6 +98,14 @@ class DbDescribe extends Command
      */
     protected function fetchColumns(\PDO $pdo, string $tableName): array|false
     {
+        $driver = strtolower($_ENV['DB_DRIVER'] ?? 'mysql');
+
+        if ($driver === 'pgsql') {
+            $stmt = $pdo->prepare("SELECT column_name AS \"Field\", udt_name AS \"Type\", is_nullable AS \"Null\", column_default AS \"Default\", ordinal_position AS \"Ordinal_Position\" FROM information_schema.columns WHERE table_name = :tableName ORDER BY ordinal_position");
+            $stmt->execute([':tableName' => $tableName]);
+            return array_values($stmt->fetchAll(\PDO::FETCH_ASSOC));
+        }
+
         $stmt = $pdo->query("SHOW COLUMNS FROM `{$tableName}`");
         if ($stmt === false) {
             return false;
@@ -148,6 +164,14 @@ class DbDescribe extends Command
      */
     protected function fetchIndexes(\PDO $pdo, string $tableName): array|false
     {
+        $driver = strtolower($_ENV['DB_DRIVER'] ?? 'mysql');
+
+        if ($driver === 'pgsql') {
+            $stmt = $pdo->prepare("SELECT i.relname AS \"Key_name\", ix.indisunique AS \"Non_unique\", a.attname AS \"Column_name\", NULL AS \"Sub_part\", CASE WHEN ix.indisprimary THEN 'PRIMARY' ELSE 'INDEX' END AS \"Index_type\" FROM pg_index ix JOIN pg_class t ON t.oid = ix.indrelid JOIN pg_class i ON i.oid = ix.indexrelid JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey) WHERE t.relname = :tableName AND t.relkind = 'r' ORDER BY i.relname, a.attnum");
+            $stmt->execute([':tableName' => $tableName]);
+            return array_values($stmt->fetchAll(\PDO::FETCH_ASSOC));
+        }
+
         $stmt = $pdo->query("SHOW INDEX FROM `{$tableName}`");
         if ($stmt === false) {
             return false;
@@ -218,6 +242,30 @@ class DbDescribe extends Command
      */
     protected function fetchForeignKeys(\PDO $pdo, string $tableName, string $dbName): array
     {
+        $driver = strtolower($_ENV['DB_DRIVER'] ?? 'mysql');
+
+        if ($driver === 'pgsql') {
+            $query = "
+                SELECT
+                    tc.constraint_name AS CONSTRAINT_NAME,
+                    kcu.column_name AS COLUMN_NAME,
+                    ccu.table_name AS REFERENCED_TABLE_NAME,
+                    ccu.column_name AS REFERENCED_COLUMN_NAME
+                FROM information_schema.table_constraints AS tc
+                JOIN information_schema.key_column_usage AS kcu
+                    ON tc.constraint_name = kcu.constraint_name
+                JOIN information_schema.constraint_column_usage AS ccu
+                    ON ccu.constraint_name = tc.constraint_name
+                WHERE tc.constraint_type = 'FOREIGN KEY'
+                  AND tc.table_name = :tableName
+                  AND tc.table_schema = current_schema()
+            ";
+
+            $stmt = $pdo->prepare($query);
+            $stmt->execute([':tableName' => $tableName]);
+            return array_values($stmt->fetchAll(\PDO::FETCH_ASSOC));
+        }
+
         $query = "
             SELECT 
                 CONSTRAINT_NAME,
@@ -241,6 +289,27 @@ class DbDescribe extends Command
      */
     protected function fetchReferentialConstraints(\PDO $pdo, string $tableName, string $dbName): array
     {
+        $driver = strtolower($_ENV['DB_DRIVER'] ?? 'mysql');
+
+        if ($driver === 'pgsql') {
+            $constraintQuery = "
+                SELECT
+                    tc.constraint_name AS CONSTRAINT_NAME,
+                    rc.delete_rule AS DELETE_RULE,
+                    rc.update_rule AS UPDATE_RULE
+                FROM information_schema.table_constraints tc
+                JOIN information_schema.referential_constraints rc
+                    ON tc.constraint_name = rc.constraint_name
+                WHERE tc.constraint_type = 'FOREIGN KEY'
+                  AND tc.table_name = :tableName
+                  AND tc.table_schema = current_schema()
+            ";
+
+            $constraintStmt = $pdo->prepare($constraintQuery);
+            $constraintStmt->execute([':tableName' => $tableName]);
+            return array_values($constraintStmt->fetchAll(\PDO::FETCH_ASSOC));
+        }
+
         $constraintQuery = "
             SELECT 
                 CONSTRAINT_NAME,
@@ -317,6 +386,24 @@ class DbDescribe extends Command
      */
     protected function fetchTableStatistics(\PDO $pdo, string $tableName, string $dbName): array|false
     {
+        $driver = strtolower($_ENV['DB_DRIVER'] ?? 'mysql');
+
+        if ($driver === 'pgsql') {
+            $query = "
+                SELECT
+                    CASE WHEN (SELECT reltuples::bigint FROM pg_class WHERE oid = to_regclass(:tableName)) < 0 THEN 0 ELSE (SELECT reltuples::bigint FROM pg_class WHERE oid = to_regclass(:tableName)) END AS row_count,
+                    0 AS data_size,
+                    0 AS index_size,
+                    0 AS total_size,
+                    NULL AS next_auto_increment
+            ";
+
+            $stmt = $pdo->prepare($query);
+            $stmt->execute([':tableName' => $tableName]);
+            $stats = $stmt->fetch(\PDO::FETCH_ASSOC);
+            return $this->normalizeAssocRow($stats);
+        }
+
         $query = "
             SELECT 
                 TABLE_ROWS as row_count,
@@ -370,6 +457,24 @@ class DbDescribe extends Command
      */
     protected function fetchTableOptions(\PDO $pdo, string $tableName, string $dbName): array|false
     {
+        $driver = strtolower($_ENV['DB_DRIVER'] ?? 'mysql');
+
+        if ($driver === 'pgsql') {
+            $query = "
+                SELECT
+                    'PostgreSQL' AS ENGINE,
+                    current_setting('server_version_num') AS TABLE_COLLATION,
+                    NULL AS CREATE_TIME,
+                    NULL AS UPDATE_TIME,
+                    NULL AS TABLE_COMMENT
+            ";
+
+            $stmt = $pdo->prepare($query);
+            $stmt->execute();
+            $options = $stmt->fetch(\PDO::FETCH_ASSOC);
+            return $this->normalizeAssocRow($options);
+        }
+
         $query = "
             SELECT 
                 ENGINE,

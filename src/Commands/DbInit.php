@@ -38,11 +38,31 @@ class DbInit extends Command
 
     protected function buildCreateDatabaseSql(string $dbName): string
     {
+        $driver = strtolower($_ENV['DB_DRIVER'] ?? 'mysql');
+
+        if ($driver === 'pgsql') {
+            $escaped = str_replace('"', '""', $dbName);
+            return "CREATE DATABASE \"{$escaped}\"";
+        }
+
         return "CREATE DATABASE IF NOT EXISTS `{$dbName}`";
     }
 
     protected function initializeDatabase(\PDO $pdo, string $dbName): void
     {
+        $driver = strtolower($_ENV['DB_DRIVER'] ?? 'mysql');
+
+        if ($driver === 'pgsql') {
+            $stmt = $pdo->prepare("SELECT 1 FROM pg_database WHERE datname = :dbName");
+            $stmt->execute([':dbName' => $dbName]);
+
+            if ($stmt->fetchColumn() !== false) {
+                return;
+            }
+        } elseif ($driver === 'sqlite') {
+            return;
+        }
+
         $pdo->exec($this->buildCreateDatabaseSql($dbName));
     }
 }
