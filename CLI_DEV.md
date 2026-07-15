@@ -29,6 +29,8 @@ vendor/bin/gemvc db:drop users
 vendor/bin/gemvc db:unique users/email
 ```
 
+**Multi-database support**: `db:init`, `db:list`, `db:describe`, `db:drop`, `db:unique`, and `admin:setadmin` are driver-aware and work against MySQL, PostgreSQL, and SQLite (driver detected from `DB_DRIVER` in `.env`, set by `gemvc init`). PostgreSQL introspection uses `information_schema`/`pg_catalog` (`to_regclass`, `pg_index`, `pg_database`); SQLite uses `sqlite_master`/`PRAGMA table_info`. Known limitations: SQLite has no native `ALTER TABLE ... ADD CONSTRAINT`, so `db:unique` falls back to `CREATE UNIQUE INDEX` on that driver; `db:drop`'s pre-drop structure preview is a simplified column list (not a full `CREATE TABLE` reconstruction) on PostgreSQL/SQLite.
+
 **Production migrations** (`db:migrate`) remain in `gemvc/library`:
 
 ```bash

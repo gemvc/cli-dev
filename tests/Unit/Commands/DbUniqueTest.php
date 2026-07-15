@@ -85,6 +85,41 @@ final class DbUniqueTest extends CommandTestCase
         $this->assertStringContainsString('HAVING cnt > 1', $sql);
     }
 
+    public function testBuildDuplicateCheckSqlOnPostgres(): void
+    {
+        \Gemvc\Helper\ProjectHelper::configure($this->projectRoot, [
+            'DB_NAME' => 'test_db',
+            'DB_HOST' => 'localhost',
+            'DB_DRIVER' => 'pgsql',
+        ]);
+        \Gemvc\Helper\ProjectHelper::loadEnv();
+
+        $command = $this->makeCommand(DbUnique::class);
+        $sql = $this->invokeMethod($command, 'buildDuplicateCheckSql', ['users', ['email', 'name']]);
+
+        $this->assertStringContainsString('"users"', $sql);
+        $this->assertStringContainsString('"email","name"', $sql);
+        $this->assertStringContainsString('HAVING cnt > 1', $sql);
+    }
+
+    public function testAddsUniqueConstraintOnPostgres(): void
+    {
+        \Gemvc\Helper\ProjectHelper::configure($this->projectRoot, [
+            'DB_NAME' => 'test_db',
+            'DB_HOST' => 'localhost',
+            'DB_DRIVER' => 'pgsql',
+        ]);
+
+        /** @var \PDO&MockObject $pdo */
+        $pdo = $this->getMockBuilder(\PDO::class)->disableOriginalConstructor()->getMock();
+        $duplicateStmt = PdoMock::statement($this, []);
+        $pdo->method('query')->willReturn($duplicateStmt);
+        $pdo->method('exec')->willReturn(1);
+        DbConnect::configure($pdo);
+
+        $this->assertTrue($this->makeCommand(DbUnique::class, ['users/email'])->execute());
+    }
+
     public function testReportDuplicatesWritesRows(): void
     {
         $command = $this->makeCommand(DbUnique::class);

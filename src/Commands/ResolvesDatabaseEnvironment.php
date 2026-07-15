@@ -21,4 +21,19 @@ trait ResolvesDatabaseEnvironment
 
         return $dbName;
     }
+
+    /**
+     * @return string One of: 'mysql', 'pgsql', 'sqlite'
+     */
+    protected function resolveDriver(): string
+    {
+        $driver = $_ENV['DB_DRIVER'] ?? 'mysql';
+        if (!is_string($driver)) {
+            return 'mysql';
+        }
+
+        $driver = strtolower($driver);
+
+        return in_array($driver, ['mysql', 'pgsql', 'sqlite'], true) ? $driver : 'mysql';
+    }
 }

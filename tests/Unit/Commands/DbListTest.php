@@ -60,6 +60,32 @@ final class DbListTest extends CommandTestCase
         $this->assertSame('test_db', $this->invokeMethod($command, 'resolveDatabaseName'));
     }
 
+    public function testListsTablesAndColumnsOnPostgres(): void
+    {
+        \Gemvc\Helper\ProjectHelper::configure($this->projectRoot, [
+            'DB_NAME' => 'test_db',
+            'DB_HOST' => 'localhost',
+            'DB_DRIVER' => 'pgsql',
+        ]);
+
+        $pdo = PdoMock::create($this, [
+            'information_schema.tables' => ['users'],
+            'information_schema.columns' => [[
+                'Field' => 'id',
+                'Type' => 'int4',
+                'Null' => 'NO',
+                'Default' => null,
+                'Key' => '',
+                'Extra' => '',
+            ]],
+        ]);
+        DbConnect::configure($pdo);
+
+        $output = $this->captureOutput(fn () => $this->makeCommand(DbList::class)->execute());
+        $this->assertStringContainsString('users', $output);
+        $this->assertStringContainsString('id', $output);
+    }
+
     public function testFormatColumnLine(): void
     {
         $command = $this->makeCommand(DbList::class);

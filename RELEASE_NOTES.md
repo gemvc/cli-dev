@@ -1,5 +1,45 @@
 # gemvc/cli-dev Release Notes
 
+## Version 1.2.0 — PostgreSQL and SQLite support
+
+**Release Date**: 15 July 2026
+**Type**: Minor release
+**Tag**: `1.2.0`
+
+### Overview
+
+`gemvc/library` ^5.9 added first-class PostgreSQL/SQLite support (`gemvc init --db=postgres|sqlite`, dialect-aware `db:migrate`). This release brings the rest of the development CLI up to parity so a project initialized with a non-MySQL driver has a fully working dev workflow, not just migrations.
+
+**No application changes required** — same `vendor/bin/gemvc` entry point and command names.
+
+### Improvements
+
+- **`ResolvesDatabaseEnvironment` trait** — added `resolveDriver(): string` (normalizes `DB_DRIVER` to `mysql`/`pgsql`/`sqlite`, defaulting to `mysql`), used by all database commands instead of ad-hoc `strtolower($_ENV['DB_DRIVER'] ?? 'mysql')` checks.
+- **`db:describe`** — table existence, column/index/foreign-key introspection, and table statistics now branch per driver: `to_regclass`/`information_schema.columns`/`pg_index`/`pg_class` for PostgreSQL, `sqlite_master` for SQLite existence checks, `SHOW ...`/`INFORMATION_SCHEMA` for MySQL (unchanged).
+- **`db:init`** — database existence check and `CREATE DATABASE` statement are driver-aware (`pg_database` lookup + double-quoted identifier for PostgreSQL; no-op for SQLite, which creates its file lazily on first connection).
+- **`db:list`** — table/column listing now supports PostgreSQL (`information_schema.tables`/`.columns`) and SQLite (`sqlite_master`, `PRAGMA table_info`) in addition to MySQL `SHOW TABLES`/`SHOW COLUMNS`.
+- **`db:drop`** — table-exists check, pre-drop structure preview, and the `DROP TABLE` statement itself are driver-aware, including correct identifier quoting (`` ` `` for MySQL, `"` for PostgreSQL/SQLite).
+- **`db:unique`** — duplicate-detection query and constraint creation use driver-correct identifier quoting; SQLite (which has no `ALTER TABLE ... ADD CONSTRAINT`) falls back to `CREATE UNIQUE INDEX`.
+- **`admin:setadmin`** — database-exists and `users`-table-exists checks now work correctly on PostgreSQL (previously queried `information_schema.SCHEMATA`/`.tables` using MySQL-only semantics, which cannot detect a Postgres database or the correct schema); recognizes `postgres`/`pgsql` as Docker Compose hostnames alongside `db`/`mysql`/`database`; error message no longer hardcodes "MySQL".
+
+### Testing
+
+- **235 tests** (unit + feature), PHPStan **level 9**, all passing
+- `PdoMock` test double extended to stub `fetchColumn()` so PostgreSQL code paths (`to_regclass`, `pg_database`, `reltuples`) are covered
+- New PostgreSQL-path test cases added for `db:describe`, `db:init`, `db:list`, `db:drop`, `db:unique`, and `admin:setadmin`
+
+### Requirements
+
+- `gemvc/library` ^5.9 (for `DB_DRIVER`-aware `.env` generation via `gemvc init`)
+- `gemvc/cli-base` ^1.0.1
+- PHP ^8.2
+
+### Migration
+
+No breaking changes. Existing MySQL projects continue to work unmodified — all new branches are additive and only activate when `DB_DRIVER` is `pgsql` or `sqlite`.
+
+---
+
 ## Version 1.1.2 — Refactor, tests, and stability
 
 **Release Date**: 9 June 2026  

@@ -12,6 +12,8 @@ use App\Model\UserModel;
 
 class SetAdmin extends Command
 {
+    use ResolvesDatabaseEnvironment;
+
     protected function readInput(string $prompt): string
     {
         echo $prompt;
@@ -61,13 +63,20 @@ class SetAdmin extends Command
 
     protected function ensureDatabaseInitialized(): bool
     {
+        ProjectHelper::loadEnv();
+        $driver = $this->resolveDriver();
+
+        if ($driver === 'sqlite') {
+            // SQLite databases are just files; db:init lazily creates them on first connect.
+            return true;
+        }
+
         $pdoRoot = DbConnect::connectAsRoot();
         if ($pdoRoot === null) {
-            $this->error("Cannot connect to MySQL server. Please check your database configuration.");
+            $this->error("Cannot connect to database server. Please check your database configuration.");
             return false;
         }
 
-        ProjectHelper::loadEnv();
         $dbName = is_string($_ENV['DB_NAME'] ?? null) ? $_ENV['DB_NAME'] : '';
         if ($dbName === '') {
             $this->error("Database name not found in environment variables");
@@ -75,14 +84,18 @@ class SetAdmin extends Command
         }
 
         try {
-            $stmt = $pdoRoot->prepare("SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = ?");
+            if ($driver === 'pgsql') {
+                $stmt = $pdoRoot->prepare("SELECT 1 FROM pg_database WHERE datname = ?");
+            } else {
+                $stmt = $pdoRoot->prepare("SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = ?");
+            }
             if ($stmt === false) {
                 $this->error("Failed to check if database exists");
                 return false;
             }
             $stmt->execute([$dbName]);
             $result = $stmt->fetch();
-            $dbExists = $result !== false && is_array($result) && isset($result['SCHEMA_NAME']);
+            $dbExists = $result !== false && is_array($result);
 
             if ($dbExists) {
                 $pdo = DbConnect::connect();
@@ -121,14 +134,25 @@ class SetAdmin extends Command
             return false;
         }
 
+        $driver = $this->resolveDriver();
         $dbName = is_string($_ENV['DB_NAME'] ?? null) ? $_ENV['DB_NAME'] : '';
         try {
-            $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM information_schema.tables WHERE table_schema = ? AND table_name = 'users'");
+            if ($driver === 'pgsql') {
+                $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = 'users'");
+                $params = [];
+            } elseif ($driver === 'sqlite') {
+                $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM sqlite_master WHERE type = 'table' AND name = 'users'");
+                $params = [];
+            } else {
+                $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM information_schema.tables WHERE table_schema = ? AND table_name = 'users'");
+                $params = [$dbName];
+            }
+
             if ($stmt === false) {
                 $this->error("Failed to prepare query to check if users table exists");
                 return false;
             }
-            $stmt->execute([$dbName]);
+            $stmt->execute($params);
             $result = $stmt->fetch();
             $count = (is_array($result) && isset($result['count']) && is_numeric($result['count'])) ? (int) $result['count'] : 0;
             $tableExists = $count > 0;
@@ -160,7 +184,7 @@ class SetAdmin extends Command
     protected function configureCliDatabaseHost(bool $verbose = true): void
     {
         $currentHost = is_string($_ENV['DB_HOST'] ?? null) ? $_ENV['DB_HOST'] : 'localhost';
-        $dockerHostnames = ['db', 'mysql', 'database'];
+        $dockerHostnames = ['db', 'mysql', 'database', 'postgres', 'pgsql'];
 
         if (!in_array(strtolower($currentHost), $dockerHostnames, true)) {
             return;

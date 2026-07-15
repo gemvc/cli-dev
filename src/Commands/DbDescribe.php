@@ -69,11 +69,18 @@ class DbDescribe extends Command
 
     protected function tableExists(\PDO $pdo, string $dbName, string $tableName): bool
     {
-        $driver = strtolower($_ENV['DB_DRIVER'] ?? 'mysql');
+        $driver = $this->resolveDriver();
 
         if ($driver === 'pgsql') {
             $stmt = $pdo->prepare("SELECT to_regclass(:tableName)");
             $stmt->execute([':tableName' => $tableName]);
+            $result = $stmt->fetchColumn();
+            return $result !== false && $result !== null;
+        }
+
+        if ($driver === 'sqlite') {
+            $stmt = $pdo->prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?");
+            $stmt->execute([$tableName]);
             return $stmt->fetchColumn() !== false;
         }
 
@@ -98,7 +105,7 @@ class DbDescribe extends Command
      */
     protected function fetchColumns(\PDO $pdo, string $tableName): array|false
     {
-        $driver = strtolower($_ENV['DB_DRIVER'] ?? 'mysql');
+        $driver = $this->resolveDriver();
 
         if ($driver === 'pgsql') {
             $stmt = $pdo->prepare("SELECT column_name AS \"Field\", udt_name AS \"Type\", is_nullable AS \"Null\", column_default AS \"Default\", ordinal_position AS \"Ordinal_Position\" FROM information_schema.columns WHERE table_name = :tableName ORDER BY ordinal_position");
@@ -164,7 +171,7 @@ class DbDescribe extends Command
      */
     protected function fetchIndexes(\PDO $pdo, string $tableName): array|false
     {
-        $driver = strtolower($_ENV['DB_DRIVER'] ?? 'mysql');
+        $driver = $this->resolveDriver();
 
         if ($driver === 'pgsql') {
             $stmt = $pdo->prepare("SELECT i.relname AS \"Key_name\", ix.indisunique AS \"Non_unique\", a.attname AS \"Column_name\", NULL AS \"Sub_part\", CASE WHEN ix.indisprimary THEN 'PRIMARY' ELSE 'INDEX' END AS \"Index_type\" FROM pg_index ix JOIN pg_class t ON t.oid = ix.indrelid JOIN pg_class i ON i.oid = ix.indexrelid JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey) WHERE t.relname = :tableName AND t.relkind = 'r' ORDER BY i.relname, a.attnum");
@@ -242,7 +249,7 @@ class DbDescribe extends Command
      */
     protected function fetchForeignKeys(\PDO $pdo, string $tableName, string $dbName): array
     {
-        $driver = strtolower($_ENV['DB_DRIVER'] ?? 'mysql');
+        $driver = $this->resolveDriver();
 
         if ($driver === 'pgsql') {
             $query = "
@@ -289,7 +296,7 @@ class DbDescribe extends Command
      */
     protected function fetchReferentialConstraints(\PDO $pdo, string $tableName, string $dbName): array
     {
-        $driver = strtolower($_ENV['DB_DRIVER'] ?? 'mysql');
+        $driver = $this->resolveDriver();
 
         if ($driver === 'pgsql') {
             $constraintQuery = "
@@ -386,7 +393,7 @@ class DbDescribe extends Command
      */
     protected function fetchTableStatistics(\PDO $pdo, string $tableName, string $dbName): array|false
     {
-        $driver = strtolower($_ENV['DB_DRIVER'] ?? 'mysql');
+        $driver = $this->resolveDriver();
 
         if ($driver === 'pgsql') {
             $query = "
@@ -457,7 +464,7 @@ class DbDescribe extends Command
      */
     protected function fetchTableOptions(\PDO $pdo, string $tableName, string $dbName): array|false
     {
-        $driver = strtolower($_ENV['DB_DRIVER'] ?? 'mysql');
+        $driver = $this->resolveDriver();
 
         if ($driver === 'pgsql') {
             $query = "

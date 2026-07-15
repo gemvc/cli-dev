@@ -214,7 +214,7 @@ final class SetAdminFeatureTest extends FeatureTestCase
         $result = $this->runCommand(new TestableSetAdmin());
 
         $this->assertFalse($result->success);
-        $this->assertStringContainsString('Cannot connect to MySQL server', $result->output);
+        $this->assertStringContainsString('Cannot connect to database server', $result->output);
     }
 
     private function useProjectEnv(): void

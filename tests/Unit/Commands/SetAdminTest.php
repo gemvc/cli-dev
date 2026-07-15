@@ -78,6 +78,52 @@ final class SetAdminTest extends CommandTestCase
         $this->assertSame('localhost', $_ENV['DB_HOST']);
     }
 
+    public function testCreatesFirstAdminUserOnPostgres(): void
+    {
+        ProjectHelper::configure($this->projectRoot, [
+            'DB_NAME' => 'test_db',
+            'DB_HOST' => 'localhost',
+            'DB_DRIVER' => 'pgsql',
+        ]);
+
+        $pdo = $this->pdoWithUsersTablePostgres(userCount: 0);
+        DbConnect::configure($pdo, $pdo);
+        UserModel::$response = (object) [
+            'response_code' => 201,
+            'message' => 'created',
+            'service_message' => 'ok',
+        ];
+
+        $this->assertTrue($this->interactiveSetAdmin()->execute());
+    }
+
+    public function testUsesLocalhostWhenPostgresDockerHostConfigured(): void
+    {
+        ProjectHelper::configure($this->projectRoot, [
+            'DB_NAME' => 'test_db',
+            'DB_HOST' => 'postgres',
+            'DB_DRIVER' => 'pgsql',
+        ]);
+
+        $pdo = $this->pdoWithUsersTablePostgres(userCount: 0);
+        DbConnect::configure($pdo, $pdo);
+
+        $this->assertTrue($this->interactiveSetAdmin()->execute());
+        $this->assertSame('localhost', $_ENV['DB_HOST']);
+    }
+
+    public function testEnsureDatabaseInitializedIsNoOpForSqlite(): void
+    {
+        ProjectHelper::configure($this->projectRoot, [
+            'DB_NAME' => 'test_db',
+            'DB_HOST' => 'localhost',
+            'DB_DRIVER' => 'sqlite',
+        ]);
+
+        $command = $this->makeCommand(SetAdmin::class);
+        $this->assertTrue($this->invokeMethod($command, 'ensureDatabaseInitialized'));
+    }
+
     public function testInitializesDatabaseWhenMissing(): void
     {
         $rootPdo = PdoMock::create($this, [
@@ -244,6 +290,15 @@ final class SetAdminTest extends CommandTestCase
         return PdoMock::create($this, [
             'SCHEMA_NAME' => [['SCHEMA_NAME' => 'test_db']],
             'table_schema = ? AND table_name' => [['count' => 1]],
+            'FROM users' => [['count' => $userCount]],
+        ]);
+    }
+
+    private function pdoWithUsersTablePostgres(int $userCount): \PDO
+    {
+        return PdoMock::create($this, [
+            'pg_database' => [[1]],
+            'current_schema() and table_name' => [['count' => 1]],
             'FROM users' => [['count' => $userCount]],
         ]);
     }

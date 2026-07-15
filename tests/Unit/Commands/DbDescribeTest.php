@@ -74,6 +74,52 @@ final class DbDescribeTest extends CommandTestCase
         $this->assertStringContainsString('users', strtolower($output));
     }
 
+    public function testDescribesTableWithFullMetadataOnPostgres(): void
+    {
+        \Gemvc\Helper\ProjectHelper::configure($this->projectRoot, [
+            'DB_NAME' => 'test_db',
+            'DB_HOST' => 'localhost',
+            'DB_DRIVER' => 'pgsql',
+        ]);
+
+        $pdo = PdoMock::create($this, [
+            'reltuples' => [[
+                'row_count' => 5,
+                'data_size' => 0,
+                'index_size' => 0,
+                'total_size' => 0,
+                'next_auto_increment' => null,
+            ]],
+            'current_setting' => [[
+                'ENGINE' => 'PostgreSQL',
+                'TABLE_COLLATION' => '160000',
+                'CREATE_TIME' => null,
+                'UPDATE_TIME' => null,
+                'TABLE_COMMENT' => null,
+            ]],
+            'pg_index' => [[
+                'Key_name' => 'users_pkey',
+                'Non_unique' => 0,
+                'Column_name' => 'id',
+                'Sub_part' => null,
+                'Index_type' => 'PRIMARY',
+            ]],
+            'key_column_usage' => [],
+            'information_schema.columns' => [[
+                'Field' => 'id',
+                'Type' => 'int4',
+                'Null' => 'NO',
+                'Default' => null,
+                'Ordinal_Position' => 1,
+            ]],
+            'to_regclass' => 'users',
+        ]);
+        DbConnect::configure($pdo);
+
+        $output = $this->captureOutput(fn () => $this->makeCommand(DbDescribe::class, ['users'])->execute());
+        $this->assertStringContainsString('users', strtolower($output));
+    }
+
     public function testHandlesMissingTable(): void
     {
         $pdo = PdoMock::create($this, [

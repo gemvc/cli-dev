@@ -78,4 +78,42 @@ final class DbDropTest extends CommandTestCase
 
         $this->assertTrue($this->invokeMethod($command, 'tableExists', [$pdo, 'users']));
     }
+
+    public function testDropsTableWithForceFlagOnPostgres(): void
+    {
+        \Gemvc\Helper\ProjectHelper::configure($this->projectRoot, [
+            'DB_NAME' => 'test_db',
+            'DB_HOST' => 'localhost',
+            'DB_DRIVER' => 'pgsql',
+        ]);
+
+        $pdo = PdoMock::create($this, [
+            'to_regclass' => 'users',
+            'information_schema.columns' => [[
+                'column_name' => 'id',
+                'data_type' => 'integer',
+                'is_nullable' => 'NO',
+            ]],
+        ]);
+        DbConnect::configure($pdo);
+
+        $this->assertTrue($this->makeCommand(DbDrop::class, ['users', '--force'])->execute());
+    }
+
+    public function testTableExistsOnPostgresWhenMissing(): void
+    {
+        \Gemvc\Helper\ProjectHelper::configure($this->projectRoot, [
+            'DB_NAME' => 'test_db',
+            'DB_HOST' => 'localhost',
+            'DB_DRIVER' => 'pgsql',
+        ]);
+        \Gemvc\Helper\ProjectHelper::loadEnv();
+
+        $pdo = PdoMock::create($this, [
+            'to_regclass' => null,
+        ]);
+        $command = $this->makeCommand(DbDrop::class);
+
+        $this->assertFalse($this->invokeMethod($command, 'tableExists', [$pdo, 'missing']));
+    }
 }

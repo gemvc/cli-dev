@@ -51,7 +51,16 @@ class DbList extends Command
      */
     protected function fetchTableNames(\PDO $pdo, string $dbName): array|false
     {
-        $stmt = $pdo->query("SHOW TABLES FROM `{$dbName}`");
+        $driver = $this->resolveDriver();
+
+        if ($driver === 'pgsql') {
+            $stmt = $pdo->query("SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema() AND table_type = 'BASE TABLE' ORDER BY table_name");
+        } elseif ($driver === 'sqlite') {
+            $stmt = $pdo->query("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name");
+        } else {
+            $stmt = $pdo->query("SHOW TABLES FROM `{$dbName}`");
+        }
+
         if ($stmt === false) {
             return false;
         }
@@ -72,6 +81,36 @@ class DbList extends Command
      */
     protected function fetchColumns(\PDO $pdo, string $table): array|false
     {
+        $driver = $this->resolveDriver();
+
+        if ($driver === 'pgsql') {
+            $stmt = $pdo->prepare("SELECT column_name AS \"Field\", udt_name AS \"Type\", is_nullable AS \"Null\", column_default AS \"Default\", '' AS \"Key\", '' AS \"Extra\" FROM information_schema.columns WHERE table_name = :tableName AND table_schema = current_schema() ORDER BY ordinal_position");
+            $stmt->execute([':tableName' => $table]);
+
+            return array_values($stmt->fetchAll(\PDO::FETCH_ASSOC));
+        }
+
+        if ($driver === 'sqlite') {
+            $stmt = $pdo->query("PRAGMA table_info('{$table}')");
+            if ($stmt === false) {
+                return false;
+            }
+
+            $columns = [];
+            foreach ($stmt->fetchAll(\PDO::FETCH_ASSOC) as $row) {
+                $columns[] = [
+                    'Field' => $row['name'] ?? '',
+                    'Type' => $row['type'] ?? '',
+                    'Null' => (isset($row['notnull']) && (int) $row['notnull'] === 1) ? 'NO' : 'YES',
+                    'Key' => (isset($row['pk']) && (int) $row['pk'] === 1) ? 'PRI' : '',
+                    'Default' => $row['dflt_value'] ?? null,
+                    'Extra' => '',
+                ];
+            }
+
+            return $columns;
+        }
+
         $stmt = $pdo->query("SHOW COLUMNS FROM `{$table}`");
         if ($stmt === false) {
             return false;

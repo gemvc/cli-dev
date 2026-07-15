@@ -38,7 +38,7 @@ class DbInit extends Command
 
     protected function buildCreateDatabaseSql(string $dbName): string
     {
-        $driver = strtolower($_ENV['DB_DRIVER'] ?? 'mysql');
+        $driver = $this->resolveDriver();
 
         if ($driver === 'pgsql') {
             $escaped = str_replace('"', '""', $dbName);
@@ -50,7 +50,7 @@ class DbInit extends Command
 
     protected function initializeDatabase(\PDO $pdo, string $dbName): void
     {
-        $driver = strtolower($_ENV['DB_DRIVER'] ?? 'mysql');
+        $driver = $this->resolveDriver();
 
         if ($driver === 'pgsql') {
             $stmt = $pdo->prepare("SELECT 1 FROM pg_database WHERE datname = :dbName");

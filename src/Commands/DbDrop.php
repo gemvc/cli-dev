@@ -100,6 +100,23 @@ class DbDrop extends Command
 
     protected function tableExists(\PDO $pdo, string $tableName): bool
     {
+        $driver = $this->resolveDriver();
+
+        if ($driver === 'pgsql') {
+            $stmt = $pdo->prepare("SELECT to_regclass(:tableName)");
+            $stmt->execute([':tableName' => $tableName]);
+            $result = $stmt->fetchColumn();
+
+            return $result !== false && $result !== null;
+        }
+
+        if ($driver === 'sqlite') {
+            $stmt = $pdo->prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?");
+            $stmt->execute([$tableName]);
+
+            return $stmt->fetchColumn() !== false;
+        }
+
         $stmt = $pdo->query("SHOW TABLES LIKE '{$tableName}'");
         if ($stmt === false) {
             throw new \Exception("Failed to check if table exists");
@@ -111,6 +128,32 @@ class DbDrop extends Command
     protected function showCreateTable(\PDO $pdo, string $tableName): void
     {
         $this->info("\nTable structure to be dropped:");
+        $driver = $this->resolveDriver();
+
+        if ($driver === 'pgsql') {
+            $stmt = $pdo->prepare("SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_name = :tableName AND table_schema = current_schema() ORDER BY ordinal_position");
+            $stmt->execute([':tableName' => $tableName]);
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $column) {
+                $name = is_string($column['column_name'] ?? null) ? $column['column_name'] : '';
+                $type = is_string($column['data_type'] ?? null) ? $column['data_type'] : '';
+                $nullable = ($column['is_nullable'] ?? null) === 'YES' ? 'NULL' : 'NOT NULL';
+                $this->info("  {$name} {$type} {$nullable}");
+            }
+
+            return;
+        }
+
+        if ($driver === 'sqlite') {
+            $stmt = $pdo->prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?");
+            $stmt->execute([$tableName]);
+            $sql = $stmt->fetchColumn();
+            if (is_string($sql)) {
+                $this->info($sql);
+            }
+
+            return;
+        }
+
         $stmt = $pdo->query("SHOW CREATE TABLE `{$tableName}`");
         if ($stmt === false) {
             throw new \Exception("Failed to get table structure");
@@ -124,6 +167,11 @@ class DbDrop extends Command
 
     protected function dropTable(\PDO $pdo, string $tableName): void
     {
-        $pdo->exec("DROP TABLE `{$tableName}`");
+        $driver = $this->resolveDriver();
+        $quoted = $driver === 'pgsql' || $driver === 'sqlite'
+            ? '"' . str_replace('"', '""', $tableName) . '"'
+            : "`{$tableName}`";
+
+        $pdo->exec("DROP TABLE {$quoted}");
     }
 }

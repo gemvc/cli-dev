@@ -50,6 +50,8 @@ abstract class CommandTestCase extends TestCase
         DbConnect::reset();
         DbMigrate::reset();
         UserModel::reset();
+        unset($_ENV['DB_DRIVER']);
+        putenv('DB_DRIVER');
 
         parent::tearDown();
     }

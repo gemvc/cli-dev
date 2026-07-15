@@ -77,14 +77,26 @@ class DbUnique extends Command
         return ['table' => $table, 'columns' => $columnList];
     }
 
+    protected function quoteIdentifier(string $identifier): string
+    {
+        $driver = $this->resolveDriver();
+
+        if ($driver === 'pgsql' || $driver === 'sqlite') {
+            return '"' . str_replace('"', '""', $identifier) . '"';
+        }
+
+        return '`' . str_replace('`', '``', $identifier) . '`';
+    }
+
     /**
      * @param list<string> $columns
      */
     protected function buildDuplicateCheckSql(string $table, array $columns): string
     {
-        $colSql = implode('`,`', $columns);
+        $quotedColumns = array_map(fn (string $column): string => $this->quoteIdentifier($column), $columns);
+        $colSql = implode(',', $quotedColumns);
 
-        return "SELECT $colSql, COUNT(*) as cnt FROM `$table` GROUP BY $colSql HAVING cnt > 1";
+        return "SELECT $colSql, COUNT(*) as cnt FROM " . $this->quoteIdentifier($table) . " GROUP BY $colSql HAVING cnt > 1";
     }
 
     /**
@@ -128,12 +140,22 @@ class DbUnique extends Command
      */
     protected function addUniqueConstraint(\PDO $pdo, string $table, array $columns): bool
     {
+        $driver = $this->resolveDriver();
         $constraintName = 'unique_' . implode('_', $columns);
-        $colSqlBacktick = '`' . implode('`,`', $columns) . '`';
+        $quotedColumns = implode(',', array_map(fn (string $column): string => $this->quoteIdentifier($column), $columns));
+        $quotedTable = $this->quoteIdentifier($table);
 
         try {
-            $pdo->exec("ALTER TABLE `$table` ADD CONSTRAINT `$constraintName` UNIQUE ($colSqlBacktick)");
-            $this->success("Unique constraint added to `$table` on (" . implode(', ', $columns) . ") successfully!");
+            if ($driver === 'sqlite') {
+                // SQLite does not support ALTER TABLE ... ADD CONSTRAINT; use a unique index instead.
+                $quotedIndexName = $this->quoteIdentifier($constraintName);
+                $pdo->exec("CREATE UNIQUE INDEX {$quotedIndexName} ON {$quotedTable} ($quotedColumns)");
+            } else {
+                $quotedConstraintName = $this->quoteIdentifier($constraintName);
+                $pdo->exec("ALTER TABLE {$quotedTable} ADD CONSTRAINT {$quotedConstraintName} UNIQUE ($quotedColumns)");
+            }
+
+            $this->success("Unique constraint added to {$quotedTable} on (" . implode(', ', $columns) . ") successfully!");
 
             return true;
         } catch (\PDOException $e) {

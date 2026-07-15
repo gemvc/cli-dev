@@ -72,15 +72,40 @@ final class PdoMock
                 return array_shift($rows);
             });
             $stmt->method('fetchAll')->willReturn($result);
+            $stmt->method('fetchColumn')->willReturnCallback(static function () use ($result) {
+                $first = $result[0] ?? false;
+                if (!is_array($first)) {
+                    return false;
+                }
+                $values = array_values($first);
+
+                return $values[0] ?? false;
+            });
         } elseif ($result === false) {
             $stmt->method('fetch')->willReturn(false);
             $stmt->method('fetchAll')->willReturn([]);
+            $stmt->method('fetchColumn')->willReturn(false);
         } else {
             $rows = is_array($result) ? $result : [$result];
             $stmt->method('fetch')->willReturnCallback(static function () use (&$rows) {
                 return array_shift($rows);
             });
             $stmt->method('fetchAll')->willReturn(is_array($result) && array_is_list($result) ? $result : [$result]);
+            $stmt->method('fetchColumn')->willReturnCallback(static function () use ($result) {
+                if (is_array($result)) {
+                    $first = $result[0] ?? false;
+
+                    if (is_array($first)) {
+                        $values = array_values($first);
+
+                        return $values[0] ?? false;
+                    }
+
+                    return $first;
+                }
+
+                return $result;
+            });
         }
 
         $stmt->method('rowCount')->willReturn(is_array($result) ? count($result) : 1);

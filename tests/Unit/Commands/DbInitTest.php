@@ -64,4 +64,54 @@ final class DbInitTest extends CommandTestCase
 
         $this->assertTrue(true);
     }
+
+    public function testBuildCreateDatabaseSqlOnPostgres(): void
+    {
+        \Gemvc\Helper\ProjectHelper::configure($this->projectRoot, [
+            'DB_NAME' => 'test_db',
+            'DB_HOST' => 'localhost',
+            'DB_DRIVER' => 'pgsql',
+        ]);
+        \Gemvc\Helper\ProjectHelper::loadEnv();
+
+        $command = $this->makeCommand(DbInit::class);
+        $this->assertSame(
+            'CREATE DATABASE "my_app"',
+            $this->invokeMethod($command, 'buildCreateDatabaseSql', ['my_app'])
+        );
+    }
+
+    public function testInitializeDatabaseSkipsCreateWhenPostgresDatabaseExists(): void
+    {
+        \Gemvc\Helper\ProjectHelper::configure($this->projectRoot, [
+            'DB_NAME' => 'test_db',
+            'DB_HOST' => 'localhost',
+            'DB_DRIVER' => 'pgsql',
+        ]);
+        \Gemvc\Helper\ProjectHelper::loadEnv();
+
+        $pdo = PdoMock::create($this, [
+            'pg_database' => 1,
+        ]);
+        $command = $this->makeCommand(DbInit::class);
+        $this->invokeMethod($command, 'initializeDatabase', [$pdo, 'test_db']);
+
+        $this->assertTrue(true);
+    }
+
+    public function testInitializeDatabaseIsNoOpForSqlite(): void
+    {
+        \Gemvc\Helper\ProjectHelper::configure($this->projectRoot, [
+            'DB_NAME' => 'test_db',
+            'DB_HOST' => 'localhost',
+            'DB_DRIVER' => 'sqlite',
+        ]);
+        \Gemvc\Helper\ProjectHelper::loadEnv();
+
+        $pdo = PdoMock::create($this);
+        $command = $this->makeCommand(DbInit::class);
+        $this->invokeMethod($command, 'initializeDatabase', [$pdo, 'test_db']);
+
+        $this->assertTrue(true);
+    }
 }
