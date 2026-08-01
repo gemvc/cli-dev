@@ -18,9 +18,9 @@ class CommandCategories
         ],
         'Database (development)' => [
             'db:init' => 'Initialize database based on configuration',
-            'db:list' => 'Show list of all tables in the database',
-            'db:describe' => 'Describe table structure in detail (columns, indexes, foreign keys)',
-            'db:drop' => 'Drop a specific table (db:drop TableName)',
+            'db:list' => 'List base tables and SQL views (columns)',
+            'db:describe' => 'Describe a table or view (columns, indexes, FKs; view definition for views)',
+            'db:drop' => 'Drop a specific table or view (db:drop Name)',
             'db:unique' => 'Add unique constraint to table column(s)',
         ],
         'Admin' => [
@@ -85,8 +85,14 @@ class CommandCategories
             'create:crud' => 'vendor/bin/gemvc create:crud User',
             'db:init' => 'vendor/bin/gemvc db:init',
             'db:list' => 'vendor/bin/gemvc db:list',
-            'db:describe' => 'vendor/bin/gemvc db:describe users',
-            'db:drop' => 'vendor/bin/gemvc db:drop users',
+            'db:describe' => [
+                'vendor/bin/gemvc db:describe users',
+                'vendor/bin/gemvc db:describe user_order_summary',
+            ],
+            'db:drop' => [
+                'vendor/bin/gemvc db:drop users',
+                'vendor/bin/gemvc db:drop user_order_summary --force',
+            ],
             'db:unique' => 'vendor/bin/gemvc db:unique users/email',
             'admin:setpassword' => 'vendor/bin/gemvc admin:setpassword',
             'admin:setadmin' => 'vendor/bin/gemvc admin:setadmin',

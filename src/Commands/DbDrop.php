@@ -7,18 +7,19 @@ use Gemvc\CLI\Command;
 use PDO;
 
 /**
- * Drop Table from the database
+ * Drop a table or view from the database
  */
 class DbDrop extends Command
 {
     use ResolvesDatabaseEnvironment;
+    use ResolvesDatabaseRelations;
 
     protected function readConfirmation(): string
     {
-        $this->write("\nAre you sure you want to drop this table? (yes/no): ", CliColor::Yellow);
+        $this->write("\nAre you sure you want to drop this relation? (yes/no): ", CliColor::Yellow);
         $handle = fopen('php://stdin', 'r');
         if ($handle === false) {
-            $this->error('Failed to open stdin');
+            $this->write("Failed to open stdin\n", CliColor::Red);
 
             return '';
         }
@@ -38,24 +39,33 @@ class DbDrop extends Command
                 return false;
             }
 
-            if (!$parsed['force'] && !$this->confirmDrop($parsed['table'])) {
-                return false;
-            }
-
             $pdo = DbConnect::connect();
             if (!$pdo) {
                 $this->error("Failed to connect to database");
                 return false;
             }
 
-            if (!$this->tableExists($pdo, $parsed['table'])) {
-                throw new \Exception("Table '{$parsed['table']}' does not exist.");
+            $dbName = $this->resolveDatabaseName();
+            if ($dbName === null) {
+                $this->error("Database name not found in configuration (DB_NAME)");
+                return false;
             }
 
-            $this->showCreateTable($pdo, $parsed['table']);
-            $this->dropTable($pdo, $parsed['table']);
+            $kind = $this->resolveRelationKind($pdo, $dbName, $parsed['table']);
+            if ($kind === null) {
+                $this->error("Table or view '{$parsed['table']}' not found");
+                return false;
+            }
 
-            $this->success("Table '{$parsed['table']}' has been dropped successfully!");
+            if (!$parsed['force'] && !$this->confirmDrop($parsed['table'], $kind)) {
+                return false;
+            }
+
+            $this->showCreateTable($pdo, $parsed['table'], $kind);
+            $this->dropRelation($pdo, $parsed['table'], $kind);
+
+            $label = $kind === 'view' ? 'View' : 'Table';
+            $this->success("{$label} '{$parsed['table']}' has been dropped successfully!");
 
             return true;
         } catch (\Exception $e) {
@@ -70,7 +80,7 @@ class DbDrop extends Command
     protected function parseDropArguments(): ?array
     {
         if ($this->args === []) {
-            $this->error("Table name is required. Usage: db:drop TableName [--force]");
+            $this->error("Table or view name is required. Usage: db:drop Name [--force]");
             return null;
         }
 
@@ -85,10 +95,17 @@ class DbDrop extends Command
         ];
     }
 
-    protected function confirmDrop(string $tableName): bool
+    /**
+     * @param 'table'|'view' $kind
+     */
+    protected function confirmDrop(string $tableName, string $kind = 'table'): bool
     {
-        $this->error("\nWARNING: This will permanently delete the table '{$tableName}' and all its data!");
-        $this->error("This action cannot be undone.");
+        if ($kind === 'view') {
+            $this->write("\nWARNING: This will permanently delete the VIEW '{$tableName}'!\n", CliColor::Red);
+        } else {
+            $this->write("\nWARNING: This will permanently delete the table '{$tableName}' and all its data!\n", CliColor::Red);
+        }
+        $this->write("This action cannot be undone.\n", CliColor::Red);
 
         if (strtolower($this->readConfirmation()) !== 'yes') {
             $this->info("Operation cancelled.");
@@ -98,35 +115,21 @@ class DbDrop extends Command
         return true;
     }
 
-    protected function tableExists(\PDO $pdo, string $tableName): bool
+    /**
+     * @param 'table'|'view' $kind
+     */
+    protected function showCreateTable(\PDO $pdo, string $tableName, string $kind = 'table'): void
     {
-        $driver = $this->resolveDriver();
+        if ($kind === 'view') {
+            $this->info("\nView definition to be dropped:");
+            $definition = $this->fetchViewDefinition($pdo, $tableName);
+            if ($definition !== null) {
+                $this->info($definition);
+            }
 
-        if ($driver === 'pgsql') {
-            $stmt = $pdo->prepare("SELECT to_regclass(:tableName)");
-            $stmt->execute([':tableName' => $tableName]);
-            $result = $stmt->fetchColumn();
-
-            return $result !== false && $result !== null;
+            return;
         }
 
-        if ($driver === 'sqlite') {
-            $stmt = $pdo->prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?");
-            $stmt->execute([$tableName]);
-
-            return $stmt->fetchColumn() !== false;
-        }
-
-        $stmt = $pdo->query("SHOW TABLES LIKE '{$tableName}'");
-        if ($stmt === false) {
-            throw new \Exception("Failed to check if table exists");
-        }
-
-        return $stmt->rowCount() > 0;
-    }
-
-    protected function showCreateTable(\PDO $pdo, string $tableName): void
-    {
         $this->info("\nTable structure to be dropped:");
         $driver = $this->resolveDriver();
 
@@ -165,13 +168,12 @@ class DbDrop extends Command
         }
     }
 
-    protected function dropTable(\PDO $pdo, string $tableName): void
+    /**
+     * @param 'table'|'view' $kind
+     */
+    protected function dropRelation(\PDO $pdo, string $tableName, string $kind): void
     {
-        $driver = $this->resolveDriver();
-        $quoted = $driver === 'pgsql' || $driver === 'sqlite'
-            ? '"' . str_replace('"', '""', $tableName) . '"'
-            : "`{$tableName}`";
-
-        $pdo->exec("DROP TABLE {$quoted}");
+        $sql = $this->dropRelationSql($tableName, $kind);
+        $pdo->exec($sql);
     }
 }

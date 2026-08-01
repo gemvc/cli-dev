@@ -18,7 +18,7 @@ final class DatabaseFeatureTest extends FeatureTestCase
         $this->useProjectEnv();
 
         $pdo = PdoMock::create($this, [
-            'SHOW TABLES' => ['users'],
+            'SHOW FULL TABLES' => [['users', 'BASE TABLE']],
             'SHOW COLUMNS' => [[
                 'Field' => 'id',
                 'Type' => 'int(11)',
@@ -33,19 +33,19 @@ final class DatabaseFeatureTest extends FeatureTestCase
         $result = $this->runner->run('db:list');
 
         $this->assertTrue($result->success);
-        $this->assertStringContainsString("Tables in database 'test_db'", $result->output);
+        $this->assertStringContainsString("Relations in database 'test_db'", $result->output);
         $this->assertStringContainsString('Table: users', $result->output);
     }
 
     public function testDbListWhenDatabaseHasNoTables(): void
     {
         $this->useProjectEnv();
-        DbConnect::configure(PdoMock::create($this, ['SHOW TABLES' => []]));
+        DbConnect::configure(PdoMock::create($this, ['SHOW FULL TABLES' => []]));
 
         $result = $this->runner->run('db:list');
 
         $this->assertFalse($result->success);
-        $this->assertStringContainsString('No tables found', $result->output);
+        $this->assertStringContainsString('No tables or views found', $result->output);
     }
 
     public function testDbDescribeShowsFullTableMetadata(): void
@@ -53,7 +53,7 @@ final class DatabaseFeatureTest extends FeatureTestCase
         $this->useProjectEnv();
 
         $pdo = PdoMock::create($this, [
-            'SHOW TABLES FROM' => [['Tables_in_test_db (users)' => 'users']],
+            'TABLE_TYPE' => 'BASE TABLE',
             'SHOW COLUMNS' => [[
                 'Field' => 'id',
                 'Type' => 'int(11)',
@@ -115,7 +115,7 @@ final class DatabaseFeatureTest extends FeatureTestCase
     public function testDbDescribeReportsMissingTable(): void
     {
         $this->useProjectEnv();
-        DbConnect::configure(PdoMock::create($this, ['SHOW TABLES FROM' => []]));
+        DbConnect::configure(PdoMock::create($this, ['TABLE_TYPE' => []]));
 
         $result = $this->runner->run('db:describe', ['missing']);
 
@@ -128,7 +128,7 @@ final class DatabaseFeatureTest extends FeatureTestCase
         $result = $this->runner->run('db:describe', []);
 
         $this->assertFalse($result->success);
-        $this->assertStringContainsString('Table name is required', $result->output);
+        $this->assertStringContainsString('Table or view name is required', $result->output);
     }
 
     public function testDbUniqueAddsConstraint(): void
@@ -183,7 +183,7 @@ final class DatabaseFeatureTest extends FeatureTestCase
         $this->useProjectEnv();
 
         $pdo = PdoMock::create($this, [
-            'SHOW TABLES LIKE' => [['Tables_in_test_db (users)' => 'users']],
+            'TABLE_TYPE' => 'BASE TABLE',
             'SHOW CREATE TABLE' => [['Create Table' => 'CREATE TABLE `users` (id INT)']],
         ]);
         DbConnect::configure($pdo);
@@ -199,7 +199,7 @@ final class DatabaseFeatureTest extends FeatureTestCase
         $result = $this->runner->run('db:drop', []);
 
         $this->assertFalse($result->success);
-        $this->assertStringContainsString('Table name is required', $result->output);
+        $this->assertStringContainsString('Table or view name is required', $result->output);
     }
 
     public function testDbInitCreatesDatabaseFromEnvFile(): void
@@ -272,7 +272,7 @@ final class DatabaseFeatureTest extends FeatureTestCase
         $this->useProjectEnv();
 
         $pdo = PdoMock::create($this, [
-            'SHOW TABLES FROM' => [['Tables_in_test_db (empty_tbl)' => 'empty_tbl']],
+            'TABLE_TYPE' => 'BASE TABLE',
             'SHOW COLUMNS' => [],
             'SHOW INDEX' => [],
             'KEY_COLUMN_USAGE' => [],
@@ -327,12 +327,12 @@ final class DatabaseFeatureTest extends FeatureTestCase
     public function testDbDropReportsMissingTable(): void
     {
         $this->useProjectEnv();
-        DbConnect::configure(PdoMock::create($this, ['SHOW TABLES LIKE' => []]));
+        DbConnect::configure(PdoMock::create($this, ['TABLE_TYPE' => []]));
 
         $result = $this->runner->run('db:drop', ['missing', '--force']);
 
         $this->assertFalse($result->success);
-        $this->assertStringContainsString('does not exist', $result->output);
+        $this->assertStringContainsString('not found', $result->output);
     }
 
     public function testDbDropFailsWhenConnectionUnavailable(): void
@@ -351,7 +351,7 @@ final class DatabaseFeatureTest extends FeatureTestCase
         $this->useProjectEnv();
 
         $pdo = PdoMock::create($this, [
-            'SHOW TABLES LIKE' => [['Tables_in_test_db (users)' => 'users']],
+            'TABLE_TYPE' => 'BASE TABLE',
             'SHOW CREATE TABLE' => [['Create Table' => 'CREATE TABLE `users` (id INT)']],
         ]);
         DbConnect::configure($pdo);
@@ -370,6 +370,9 @@ final class DatabaseFeatureTest extends FeatureTestCase
     public function testDbDropCancelsWhenNotConfirmed(): void
     {
         $this->useProjectEnv();
+        DbConnect::configure(PdoMock::create($this, [
+            'TABLE_TYPE' => 'BASE TABLE',
+        ]));
 
         $result = $this->runCommand(new class(['users']) extends TestableDbDrop {
             protected function readConfirmation(): string

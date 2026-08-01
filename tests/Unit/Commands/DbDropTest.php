@@ -20,7 +20,7 @@ final class DbDropTest extends CommandTestCase
     public function testDropsTableWithForceFlag(): void
     {
         $pdo = PdoMock::create($this, [
-            'SHOW TABLES LIKE' => [['Tables_in_test_db (users)' => 'users']],
+            'TABLE_TYPE' => 'BASE TABLE',
             'SHOW CREATE TABLE' => [['Create Table' => 'CREATE TABLE `users` (id INT)']],
         ]);
         DbConnect::configure($pdo);
@@ -28,10 +28,29 @@ final class DbDropTest extends CommandTestCase
         $this->assertTrue($this->makeCommand(DbDrop::class, ['users', '--force'])->execute());
     }
 
+    public function testDropsViewWithForceFlag(): void
+    {
+        $execSql = null;
+        $pdo = PdoMock::create($this, [
+            'TABLE_TYPE' => 'VIEW',
+            'SHOW CREATE VIEW' => [['Create View' => 'CREATE VIEW `user_access` AS SELECT 1']],
+        ]);
+        $pdo->method('exec')->willReturnCallback(static function (string $sql) use (&$execSql): int {
+            $execSql = $sql;
+
+            return 0;
+        });
+        DbConnect::configure($pdo);
+
+        $this->assertTrue($this->makeCommand(DbDrop::class, ['user_access', '--force'])->execute());
+        $this->assertIsString($execSql);
+        $this->assertStringStartsWith('DROP VIEW', $execSql);
+    }
+
     public function testFailsWhenTableDoesNotExist(): void
     {
         $pdo = PdoMock::create($this, [
-            'SHOW TABLES LIKE' => [],
+            'TABLE_TYPE' => [],
         ]);
         DbConnect::configure($pdo);
 
@@ -66,17 +85,17 @@ final class DbDropTest extends CommandTestCase
             }
         };
 
-        $this->assertFalse($this->invokeMethod($command, 'confirmDrop', ['users']));
+        $this->assertFalse($this->invokeMethod($command, 'confirmDrop', ['users', 'table']));
     }
 
-    public function testTableExists(): void
+    public function testRelationExists(): void
     {
         $pdo = PdoMock::create($this, [
-            'SHOW TABLES LIKE' => [['Tables_in_test_db (users)' => 'users']],
+            'TABLE_TYPE' => 'BASE TABLE',
         ]);
         $command = $this->makeCommand(DbDrop::class);
 
-        $this->assertTrue($this->invokeMethod($command, 'tableExists', [$pdo, 'users']));
+        $this->assertTrue($this->invokeMethod($command, 'relationExists', [$pdo, 'test_db', 'users']));
     }
 
     public function testDropsTableWithForceFlagOnPostgres(): void
@@ -88,7 +107,7 @@ final class DbDropTest extends CommandTestCase
         ]);
 
         $pdo = PdoMock::create($this, [
-            'to_regclass' => 'users',
+            'table_type IN' => 'BASE TABLE',
             'information_schema.columns' => [[
                 'column_name' => 'id',
                 'data_type' => 'integer',
@@ -100,7 +119,7 @@ final class DbDropTest extends CommandTestCase
         $this->assertTrue($this->makeCommand(DbDrop::class, ['users', '--force'])->execute());
     }
 
-    public function testTableExistsOnPostgresWhenMissing(): void
+    public function testRelationExistsOnPostgresWhenMissing(): void
     {
         \Gemvc\Helper\ProjectHelper::configure($this->projectRoot, [
             'DB_NAME' => 'test_db',
@@ -110,10 +129,10 @@ final class DbDropTest extends CommandTestCase
         \Gemvc\Helper\ProjectHelper::loadEnv();
 
         $pdo = PdoMock::create($this, [
-            'to_regclass' => null,
+            'table_type IN' => null,
         ]);
         $command = $this->makeCommand(DbDrop::class);
 
-        $this->assertFalse($this->invokeMethod($command, 'tableExists', [$pdo, 'missing']));
+        $this->assertFalse($this->invokeMethod($command, 'relationExists', [$pdo, 'test_db', 'missing']));
     }
 }

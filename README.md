@@ -4,7 +4,7 @@ Development CLI commands for the [GEMVC](https://gemvc.de) framework.
 
 Composer package: `gemvc/cli-dev`  
 GitHub repo: [gemvc/cli-dev](https://github.com/gemvc/cli-dev)  
-Current release: **1.1.2** (9 June 2026) — see [RELEASE_NOTES.md](RELEASE_NOTES.md)
+Current package version: **1.3.0** (`composer.json`; publish/tag when releasing).
 
 > **WARNING**
 >
@@ -20,17 +20,18 @@ Current release: **1.1.2** (9 June 2026) — see [RELEASE_NOTES.md](RELEASE_NOTE
 composer require --dev gemvc/cli-dev
 ```
 
-Requires `gemvc/library` ^5.8 (pulled in automatically).
+Hard Composer require: `gemvc/cli-base` ^1.0.1 (PHP ^8.2).  
+Soft ecosystem pairing: install beside `gemvc/library` in the app. For SQL **views** (`ViewTable` + `db:migrate`), use `gemvc/library` **^5.11**. Multi-driver `.env` (`DB_DRIVER`) needs library ^5.9+.
 
 ## Commands
 
 | Group | Commands |
 |-------|----------|
 | Code generation | `create:service`, `create:controller`, `create:model`, `create:table`, `create:crud` |
-| Database (dev) | `db:init`, `db:list`, `db:describe`, `db:drop`, `db:unique` |
+| Database (dev) | `db:init`, `db:list` (tables + views), `db:describe` (table or view), `db:drop` (table or view), `db:unique` |
 | Admin | `admin:setpassword`, `admin:setadmin` |
 
-Production migrations stay in the core library: `gemvc db:migrate TableClass`.
+Production migrations stay in the core library: `gemvc db:migrate TableClass` (or a `ViewTable` class).
 
 ## Namespace
 
@@ -38,25 +39,26 @@ Production migrations stay in the core library: `gemvc db:migrate TableClass`.
 
 Shared internal traits (same namespace, not part of the public CLI surface):
 
-- `ResolvesDatabaseEnvironment` — DB env loading for `db:*` commands
+- `ResolvesDatabaseEnvironment` — `loadProjectEnv()`, `resolveDatabaseName()`, `resolveDriver()` (`mysql` / `pgsql` / `sqlite`)
+- `ResolvesDatabaseRelations` — shared table/view list, kind, definition, and drop SQL for `db:list` / `db:describe` / `db:drop`
 
 ## Dependencies
 
-- `gemvc/cli-base` — terminal I/O and codegen abstracts
-- `gemvc/library` — database layer, helpers, `DbConnect` / `DbMigrate` (core)
+- `gemvc/cli-base` — terminal I/O and codegen abstracts (**hard** require)
+- `gemvc/library` — database layer, helpers, `DbConnect` / `DbMigrate` / `ViewTable` in the consuming app (**soft** pairing; not a Composer require of this package)
 
 ## Pairing with gemvc/library
 
 ```
-gemvc/library  →  does NOT require cli-dev (suggest only after 5.9)
-gemvc/cli-dev  →  requires gemvc/library (no circular dependency)
+gemvc/library  →  does NOT require cli-dev (suggest only)
+gemvc/cli-dev  →  requires gemvc/cli-base only (no circular dependency on library)
 ```
 
 ## Development
 
 ```bash
 composer install
-composer test              # unit + feature (223 tests)
+composer test              # unit + feature (241 tests)
 composer test:unit         # unit tests only
 composer test:feature      # feature tests (project-style runs)
 composer test:coverage     # full coverage report

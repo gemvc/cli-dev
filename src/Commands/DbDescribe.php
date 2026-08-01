@@ -10,10 +10,11 @@ use Gemvc\CLI\Commands\DbConnect;
 class DbDescribe extends Command
 {
     use ResolvesDatabaseEnvironment;
+    use ResolvesDatabaseRelations;
 
     private const TABLE_BOX_WIDTH = 78;
 
-    protected string $description = "Describe a specific database table structure in detail. Shows columns, indexes, foreign keys, and table statistics.";
+    protected string $description = "Describe a specific database table or view structure in detail. Shows columns, indexes, foreign keys, statistics, and view definition for views.";
 
     public function execute(): bool
     {
@@ -36,12 +37,13 @@ class DbDescribe extends Command
                 return false;
             }
 
-            if (!$this->tableExists($pdo, $dbName, $tableName)) {
-                $this->error("Table '{$tableName}' not found in database '{$dbName}'");
+            $kind = $this->resolveRelationKind($pdo, $dbName, $tableName);
+            if ($kind === null) {
+                $this->error("Table or view '{$tableName}' not found in database '{$dbName}'");
                 return false;
             }
 
-            $this->renderTableDescription($pdo, $tableName, $dbName);
+            $this->renderTableDescription($pdo, $tableName, $dbName, $kind);
 
             $this->write("\n");
 
@@ -55,7 +57,7 @@ class DbDescribe extends Command
     protected function parseTableArgument(): ?string
     {
         if (empty($this->args[0])) {
-            $this->error("Table name is required. Usage: gemvc db:describe TableName");
+            $this->error("Table or view name is required. Usage: gemvc db:describe Name");
             return null;
         }
 
@@ -67,35 +69,20 @@ class DbDescribe extends Command
         return $this->args[0];
     }
 
-    protected function tableExists(\PDO $pdo, string $dbName, string $tableName): bool
+    /**
+     * @param 'table'|'view' $kind
+     */
+    protected function renderTableDescription(\PDO $pdo, string $tableName, string $dbName, string $kind): void
     {
-        $driver = $this->resolveDriver();
-
-        if ($driver === 'pgsql') {
-            $stmt = $pdo->prepare("SELECT to_regclass(:tableName)");
-            $stmt->execute([':tableName' => $tableName]);
-            $result = $stmt->fetchColumn();
-            return $result !== false && $result !== null;
-        }
-
-        if ($driver === 'sqlite') {
-            $stmt = $pdo->prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?");
-            $stmt->execute([$tableName]);
-            return $stmt->fetchColumn() !== false;
-        }
-
-        $stmt = $pdo->prepare("SHOW TABLES FROM `{$dbName}` LIKE ?");
-        $stmt->execute([$tableName]);
-
-        return $stmt->rowCount() > 0;
-    }
-
-    protected function renderTableDescription(\PDO $pdo, string $tableName, string $dbName): void
-    {
-        $this->displayTableHeader($tableName);
+        $this->displayTableHeader($tableName, $kind);
         $this->showTableStructure($pdo, $tableName);
-        $this->showIndexes($pdo, $tableName);
-        $this->showForeignKeys($pdo, $tableName, $dbName);
+
+        if ($kind === 'view') {
+            $this->showViewDefinition($pdo, $tableName);
+        }
+
+        $this->showIndexes($pdo, $tableName, $kind);
+        $this->showForeignKeys($pdo, $tableName, $dbName, $kind);
         $this->showTableStatistics($pdo, $tableName, $dbName);
         $this->showTableOptions($pdo, $tableName, $dbName);
     }
@@ -113,12 +100,50 @@ class DbDescribe extends Command
             return array_values($stmt->fetchAll(\PDO::FETCH_ASSOC));
         }
 
+        if ($driver === 'sqlite') {
+            $stmt = $pdo->query("PRAGMA table_info('{$tableName}')");
+            if ($stmt === false) {
+                return false;
+            }
+
+            $columns = [];
+            foreach ($stmt->fetchAll(\PDO::FETCH_ASSOC) as $row) {
+                $columns[] = [
+                    'Field' => $row['name'] ?? '',
+                    'Type' => $row['type'] ?? '',
+                    'Null' => (isset($row['notnull']) && (int) $row['notnull'] === 1) ? 'NO' : 'YES',
+                    'Key' => (isset($row['pk']) && (int) $row['pk'] === 1) ? 'PRI' : '',
+                    'Default' => $row['dflt_value'] ?? null,
+                    'Extra' => '',
+                ];
+            }
+
+            return $columns;
+        }
+
         $stmt = $pdo->query("SHOW COLUMNS FROM `{$tableName}`");
         if ($stmt === false) {
             return false;
         }
 
         return array_values($stmt->fetchAll(\PDO::FETCH_ASSOC));
+    }
+
+    protected function showViewDefinition(\PDO $pdo, string $viewName): void
+    {
+        $this->displaySectionHeader("VIEW DEFINITION");
+
+        $definition = $this->fetchViewDefinition($pdo, $viewName);
+        if ($definition === null) {
+            $this->echoBoxRow('No view definition available');
+            $this->echoBoxClose();
+            return;
+        }
+
+        foreach (preg_split("/\r\n|\n|\r/", $definition) ?: [] as $line) {
+            $this->echoBoxRow($line);
+        }
+        $this->echoBoxClose();
     }
 
     protected function showTableStructure(\PDO $pdo, string $tableName): void
@@ -167,14 +192,19 @@ class DbDescribe extends Command
     }
 
     /**
+     * @param 'table'|'view' $kind
      * @return list<array<string, mixed>>|false
      */
-    protected function fetchIndexes(\PDO $pdo, string $tableName): array|false
+    protected function fetchIndexes(\PDO $pdo, string $tableName, string $kind = 'table'): array|false
     {
         $driver = $this->resolveDriver();
 
+        if ($driver === 'sqlite' || $kind === 'view') {
+            return [];
+        }
+
         if ($driver === 'pgsql') {
-            $stmt = $pdo->prepare("SELECT i.relname AS \"Key_name\", ix.indisunique AS \"Non_unique\", a.attname AS \"Column_name\", NULL AS \"Sub_part\", CASE WHEN ix.indisprimary THEN 'PRIMARY' ELSE 'INDEX' END AS \"Index_type\" FROM pg_index ix JOIN pg_class t ON t.oid = ix.indrelid JOIN pg_class i ON i.oid = ix.indexrelid JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey) WHERE t.relname = :tableName AND t.relkind = 'r' ORDER BY i.relname, a.attnum");
+            $stmt = $pdo->prepare("SELECT i.relname AS \"Key_name\", ix.indisunique AS \"Non_unique\", a.attname AS \"Column_name\", NULL AS \"Sub_part\", CASE WHEN ix.indisprimary THEN 'PRIMARY' ELSE 'INDEX' END AS \"Index_type\" FROM pg_index ix JOIN pg_class t ON t.oid = ix.indrelid JOIN pg_class i ON i.oid = ix.indexrelid JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey) WHERE t.relname = :tableName AND t.relkind IN ('r', 'v') ORDER BY i.relname, a.attnum");
             $stmt->execute([':tableName' => $tableName]);
             return array_values($stmt->fetchAll(\PDO::FETCH_ASSOC));
         }
@@ -187,11 +217,14 @@ class DbDescribe extends Command
         return array_values($stmt->fetchAll(\PDO::FETCH_ASSOC));
     }
 
-    protected function showIndexes(\PDO $pdo, string $tableName): void
+    /**
+     * @param 'table'|'view' $kind
+     */
+    protected function showIndexes(\PDO $pdo, string $tableName, string $kind = 'table'): void
     {
         $this->displaySectionHeader("🔍 INDEXES");
 
-        $indexes = $this->fetchIndexes($pdo, $tableName);
+        $indexes = $this->fetchIndexes($pdo, $tableName, $kind);
         if ($indexes === false) {
             $this->error("Failed to query table indexes");
             return;
@@ -245,11 +278,16 @@ class DbDescribe extends Command
     }
 
     /**
+     * @param 'table'|'view' $kind
      * @return list<array<string, mixed>>
      */
-    protected function fetchForeignKeys(\PDO $pdo, string $tableName, string $dbName): array
+    protected function fetchForeignKeys(\PDO $pdo, string $tableName, string $dbName, string $kind = 'table'): array
     {
         $driver = $this->resolveDriver();
+
+        if ($driver === 'sqlite' || $kind === 'view') {
+            return [];
+        }
 
         if ($driver === 'pgsql') {
             $query = "
@@ -292,11 +330,16 @@ class DbDescribe extends Command
     }
 
     /**
+     * @param 'table'|'view' $kind
      * @return list<array<string, mixed>>
      */
-    protected function fetchReferentialConstraints(\PDO $pdo, string $tableName, string $dbName): array
+    protected function fetchReferentialConstraints(\PDO $pdo, string $tableName, string $dbName, string $kind = 'table'): array
     {
         $driver = $this->resolveDriver();
+
+        if ($driver === 'sqlite' || $kind === 'view') {
+            return [];
+        }
 
         if ($driver === 'pgsql') {
             $constraintQuery = "
@@ -333,11 +376,14 @@ class DbDescribe extends Command
         return array_values($constraintStmt->fetchAll(\PDO::FETCH_ASSOC));
     }
 
-    protected function showForeignKeys(\PDO $pdo, string $tableName, string $dbName): void
+    /**
+     * @param 'table'|'view' $kind
+     */
+    protected function showForeignKeys(\PDO $pdo, string $tableName, string $dbName, string $kind = 'table'): void
     {
         $this->displaySectionHeader("🔗 FOREIGN KEYS");
 
-        $foreignKeys = $this->fetchForeignKeys($pdo, $tableName, $dbName);
+        $foreignKeys = $this->fetchForeignKeys($pdo, $tableName, $dbName, $kind);
 
         if ($foreignKeys === []) {
             $this->echoBoxRow('No foreign keys found');
@@ -345,7 +391,7 @@ class DbDescribe extends Command
             return;
         }
 
-        $constraints = $this->fetchReferentialConstraints($pdo, $tableName, $dbName);
+        $constraints = $this->fetchReferentialConstraints($pdo, $tableName, $dbName, $kind);
 
         // Create a lookup array for constraints
         $constraintRules = [];
@@ -394,6 +440,10 @@ class DbDescribe extends Command
     protected function fetchTableStatistics(\PDO $pdo, string $tableName, string $dbName): array|false
     {
         $driver = $this->resolveDriver();
+
+        if ($driver === 'sqlite') {
+            return false;
+        }
 
         if ($driver === 'pgsql') {
             $query = "
@@ -465,6 +515,10 @@ class DbDescribe extends Command
     protected function fetchTableOptions(\PDO $pdo, string $tableName, string $dbName): array|false
     {
         $driver = $this->resolveDriver();
+
+        if ($driver === 'sqlite') {
+            return false;
+        }
 
         if ($driver === 'pgsql') {
             $query = "
@@ -577,10 +631,14 @@ class DbDescribe extends Command
         return round($bytes, 2) . ' ' . $units[$i];
     }
 
-    protected function displayTableHeader(string $tableName): void
+    /**
+     * @param 'table'|'view' $kind
+     */
+    protected function displayTableHeader(string $tableName, string $kind = 'table'): void
     {
+        $prefix = $kind === 'view' ? 'VIEW: ' : 'TABLE: ';
         $boxShow = new CliBoxShow();
-        $boxShow->displayInfoBox('TABLE: ' . strtoupper($tableName), []);
+        $boxShow->displayInfoBox($prefix . strtoupper($tableName), []);
     }
 
     protected function displaySectionHeader(string $title): void

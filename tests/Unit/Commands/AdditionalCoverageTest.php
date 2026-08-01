@@ -35,7 +35,7 @@ final class AdditionalCoverageTest extends CommandTestCase
     public function testDbDropConfirmsAndDropsTable(): void
     {
         $pdo = PdoMock::create($this, [
-            'SHOW TABLES LIKE' => [['Tables_in_test_db (users)' => 'users']],
+            'TABLE_TYPE' => 'BASE TABLE',
             'SHOW CREATE TABLE' => [['Create Table' => 'CREATE TABLE `users` (id INT)']],
         ]);
         DbConnect::configure($pdo);
@@ -241,7 +241,7 @@ final class AdditionalCoverageTest extends CommandTestCase
     public function testDbListHandlesColumnQueryFailure(): void
     {
         $pdo = PdoMock::create($this, [
-            'SHOW TABLES' => ['users'],
+            'SHOW FULL TABLES' => [['users', 'BASE TABLE']],
             'SHOW COLUMNS' => false,
         ]);
         DbConnect::configure($pdo);
@@ -252,7 +252,7 @@ final class AdditionalCoverageTest extends CommandTestCase
     public function testDbListHandlesEmptyColumns(): void
     {
         $pdo = PdoMock::create($this, [
-            'SHOW TABLES' => ['users'],
+            'SHOW FULL TABLES' => [['users', 'BASE TABLE']],
             'SHOW COLUMNS' => [],
         ]);
         DbConnect::configure($pdo);
@@ -263,7 +263,7 @@ final class AdditionalCoverageTest extends CommandTestCase
     public function testDbListHandlesTableQueryFailure(): void
     {
         $pdo = PdoMock::create($this, [
-            'SHOW TABLES' => false,
+            'SHOW FULL TABLES' => false,
         ]);
         DbConnect::configure($pdo);
 
@@ -503,7 +503,7 @@ final class AdditionalCoverageTest extends CommandTestCase
     public function testDbDescribeCoversWideTableLayout(): void
     {
         $pdo = PdoMock::create($this, [
-            'SHOW TABLES FROM' => [['Tables_in_test_db (wide)' => 'wide']],
+            'TABLE_TYPE' => 'BASE TABLE',
             'SHOW COLUMNS' => [[
                 'Field' => str_repeat('column', 20),
                 'Type' => 'varchar(255)',
@@ -579,10 +579,14 @@ final class AdditionalCoverageTest extends CommandTestCase
     {
         /** @var \PDO&\PHPUnit\Framework\MockObject\MockObject $pdo */
         $pdo = $this->getMockBuilder(\PDO::class)->disableOriginalConstructor()->getMock();
-        $pdo->method('query')->willReturnCallback(function (string $sql) {
-            if (str_contains($sql, 'SHOW TABLES LIKE')) {
-                return PdoMock::statement($this, [['Tables_in_test_db (users)' => 'users']]);
+        $pdo->method('prepare')->willReturnCallback(function (string $sql) {
+            if (stripos($sql, 'TABLE_TYPE') !== false) {
+                return PdoMock::statement($this, 'BASE TABLE', true);
             }
+
+            return false;
+        });
+        $pdo->method('query')->willReturnCallback(function (string $sql) {
             if (str_contains($sql, 'SHOW CREATE TABLE')) {
                 return false;
             }
@@ -851,7 +855,7 @@ final class AdditionalCoverageTest extends CommandTestCase
     public function testDbDescribeForeignKeysWithoutConstraintRules(): void
     {
         $pdo = PdoMock::create($this, [
-            'SHOW TABLES FROM' => [['Tables_in_test_db (fk)' => 'fk']],
+            'TABLE_TYPE' => 'BASE TABLE',
             'SHOW COLUMNS' => [[
                 'Field' => 'id',
                 'Type' => 'int(11)',
@@ -879,7 +883,7 @@ final class AdditionalCoverageTest extends CommandTestCase
     public function testDbDescribeIndexWithSubPart(): void
     {
         $pdo = PdoMock::create($this, [
-            'SHOW TABLES FROM' => [['Tables_in_test_db (idx)' => 'idx']],
+            'TABLE_TYPE' => 'BASE TABLE',
             'SHOW COLUMNS' => [[
                 'Field' => 'slug',
                 'Type' => 'varchar(100)',
@@ -923,11 +927,11 @@ final class AdditionalCoverageTest extends CommandTestCase
         $this->assertFalse($this->makeCommand(SetAdmin::class)->execute());
     }
 
-    public function testDbDropFailsWhenShowTablesQueryFails(): void
+    public function testDbDropFailsWhenRelationKindCannotBeResolved(): void
     {
         /** @var \PDO&\PHPUnit\Framework\MockObject\MockObject $pdo */
         $pdo = $this->getMockBuilder(\PDO::class)->disableOriginalConstructor()->getMock();
-        $pdo->method('query')->willReturn(false);
+        $pdo->method('prepare')->willReturn(false);
         DbConnect::configure($pdo);
 
         $this->assertFalse($this->makeCommand(DbDrop::class, ['users', '--force'])->execute());
@@ -971,7 +975,7 @@ final class AdditionalCoverageTest extends CommandTestCase
     public function testDbDescribeStatisticsWithoutAutoIncrement(): void
     {
         $pdo = PdoMock::create($this, [
-            'SHOW TABLES FROM' => [['Tables_in_test_db (stats)' => 'stats']],
+            'TABLE_TYPE' => 'BASE TABLE',
             'SHOW COLUMNS' => [[
                 'Field' => 'id',
                 'Type' => 'int(11)',

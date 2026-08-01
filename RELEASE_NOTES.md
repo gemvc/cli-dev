@@ -1,5 +1,47 @@
 # gemvc/cli-dev Release Notes
 
+## Version 1.3.0 — SQL views in db:list / db:describe / db:drop
+
+**Release Date**: 1 August 2026
+**Type**: Minor release
+**Tag**: `1.3.0` (cut when publishing; `composer.json` already `"version": "1.3.0"`)
+
+### Overview
+
+`gemvc/library` 5.11 introduced `ViewTable` and `db:migrate` for SQL views. This release makes development introspection match that reality: `db:list` shows views, `db:describe` works on views (including definition), and `db:drop` uses `DROP VIEW` when the target is a view.
+
+### Improvements
+
+- **`ResolvesDatabaseRelations` trait** — shared fetch/exists/kind/definition/drop SQL for mysql / pgsql / sqlite
+- **`db:list`** — lists base tables **and** views with labeled sections (`SHOW FULL TABLES` / `information_schema` / `sqlite_master`)
+- **`db:describe`** — accepts views; header `VIEW:`; section VIEW DEFINITION; SQLite soft-empty for indexes/FKs/stats/options so describe succeeds end-to-end; views soft-empty indexes/FKs on all drivers
+- **`db:drop`** — connect → resolve kind → confirm → `DROP VIEW` for views (never `DROP TABLE` on a view); `--force` skips confirmation
+- **SQLite describe** — `PRAGMA table_info` for columns (parity with `db:list`)
+
+### Examples
+
+```bash
+vendor/bin/gemvc db:list
+vendor/bin/gemvc db:describe user_order_summary
+vendor/bin/gemvc db:drop user_order_summary --force
+```
+
+### Testing
+
+- **241 tests** (unit + feature), PHPStan **level 9**
+
+### Requirements
+
+- Soft pairing: `gemvc/library` ^5.11 (for `ViewTable` + view migrate)
+- Hard require: `gemvc/cli-base` ^1.0.1
+- PHP ^8.2
+
+### Migration
+
+No breaking changes for existing table workflows. Empty-database messaging now says “tables or views”. Prefer `--force` for non-interactive drops.
+
+---
+
 ## Version 1.2.0 — PostgreSQL and SQLite support
 
 **Release Date**: 15 July 2026

@@ -19,7 +19,7 @@ final class DbDescribeTest extends CommandTestCase
     public function testDescribesTableWithFullMetadata(): void
     {
         $pdo = PdoMock::create($this, [
-            'SHOW TABLES FROM' => [['Tables_in_test_db (users)' => 'users']],
+            'TABLE_TYPE' => 'BASE TABLE',
             'SHOW COLUMNS' => [[
                 'Field' => 'id',
                 'Type' => 'int(11)',
@@ -72,6 +72,7 @@ final class DbDescribeTest extends CommandTestCase
 
         $output = $this->captureOutput(fn () => $this->makeCommand(DbDescribe::class, ['users'])->execute());
         $this->assertStringContainsString('users', strtolower($output));
+        $this->assertStringContainsString('TABLE:', $output);
     }
 
     public function testDescribesTableWithFullMetadataOnPostgres(): void
@@ -83,6 +84,7 @@ final class DbDescribeTest extends CommandTestCase
         ]);
 
         $pdo = PdoMock::create($this, [
+            'table_type IN' => 'BASE TABLE',
             'reltuples' => [[
                 'row_count' => 5,
                 'data_size' => 0,
@@ -112,7 +114,6 @@ final class DbDescribeTest extends CommandTestCase
                 'Default' => null,
                 'Ordinal_Position' => 1,
             ]],
-            'to_regclass' => 'users',
         ]);
         DbConnect::configure($pdo);
 
@@ -123,7 +124,7 @@ final class DbDescribeTest extends CommandTestCase
     public function testHandlesMissingTable(): void
     {
         $pdo = PdoMock::create($this, [
-            'SHOW TABLES FROM' => [],
+            'TABLE_TYPE' => [],
         ]);
         DbConnect::configure($pdo);
 
@@ -133,7 +134,7 @@ final class DbDescribeTest extends CommandTestCase
     public function testHandlesEmptySections(): void
     {
         $pdo = PdoMock::create($this, [
-            'SHOW TABLES FROM' => [['Tables_in_test_db (empty_tbl)' => 'empty_tbl']],
+            'TABLE_TYPE' => 'BASE TABLE',
             'SHOW COLUMNS' => [],
             'SHOW INDEX' => [],
             'KEY_COLUMN_USAGE' => [],
@@ -143,6 +144,66 @@ final class DbDescribeTest extends CommandTestCase
         DbConnect::configure($pdo);
 
         $this->assertTrue($this->makeCommand(DbDescribe::class, ['empty_tbl'])->execute());
+    }
+
+    public function testDescribesSqliteView(): void
+    {
+        \Gemvc\Helper\ProjectHelper::configure($this->projectRoot, [
+            'DB_NAME' => 'test_db',
+            'DB_DRIVER' => 'sqlite',
+        ]);
+
+        $test = $this;
+        $pdo = PdoMock::create($this, [
+            'sqlite_master' => static function (string $sql) use ($test) {
+                if (stripos($sql, 'SELECT sql') !== false) {
+                    return PdoMock::statement($test, 'CREATE VIEW user_access AS SELECT 1 AS user_id');
+                }
+
+                return PdoMock::statement($test, 'view');
+            },
+            'PRAGMA table_info' => [[
+                'name' => 'user_id',
+                'type' => 'INTEGER',
+                'notnull' => 0,
+                'pk' => 0,
+                'dflt_value' => null,
+            ]],
+        ]);
+        DbConnect::configure($pdo);
+
+        $output = $this->captureOutput(fn () => $this->makeCommand(DbDescribe::class, ['user_access'])->execute());
+        $this->assertStringContainsString('VIEW:', $output);
+        $this->assertStringContainsString('VIEW DEFINITION', $output);
+        $this->assertStringContainsString('CREATE VIEW', $output);
+        $this->assertStringContainsString('No indexes found', $output);
+    }
+
+    public function testDescribesMysqlView(): void
+    {
+        $pdo = PdoMock::create($this, [
+            'TABLE_TYPE' => 'VIEW',
+            'SHOW COLUMNS' => [[
+                'Field' => 'user_id',
+                'Type' => 'int(11)',
+                'Null' => 'YES',
+                'Key' => '',
+                'Default' => null,
+                'Extra' => '',
+            ]],
+            'SHOW CREATE VIEW' => [[
+                'Create View' => 'CREATE VIEW `user_access` AS SELECT 1 AS user_id',
+            ]],
+            'TABLE_ROWS' => false,
+            'ENGINE' => false,
+        ]);
+        DbConnect::configure($pdo);
+
+        $output = $this->captureOutput(fn () => $this->makeCommand(DbDescribe::class, ['user_access'])->execute());
+        $this->assertStringContainsString('VIEW:', $output);
+        $this->assertStringContainsString('VIEW DEFINITION', $output);
+        $this->assertStringContainsString('No indexes found', $output);
+        $this->assertStringContainsString('No foreign keys found', $output);
     }
 
     public function testFormatBytesViaReflection(): void

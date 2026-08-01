@@ -44,6 +44,10 @@ final class CommandCategoriesTest extends TestCase
 
         $examples = CommandCategories::getExamples();
         $this->assertIsArray($examples['create:service']);
-        $this->assertSame('vendor/bin/gemvc db:drop users', $examples['db:drop']);
+        $this->assertIsArray($examples['db:describe']);
+        $this->assertIsArray($examples['db:drop']);
+        $this->assertContains('vendor/bin/gemvc db:drop users', $examples['db:drop']);
+        $this->assertStringContainsString('views', CommandCategories::getDescription('db:list'));
+        $this->assertStringContainsString('view', strtolower(CommandCategories::getDescription('db:describe')));
     }
 }

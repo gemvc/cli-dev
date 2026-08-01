@@ -9,11 +9,12 @@ use Gemvc\CLI\Commands\DbConnect;
 class DbList extends Command
 {
     use ResolvesDatabaseEnvironment;
+    use ResolvesDatabaseRelations;
 
     public function execute(): bool
     {
         try {
-            $this->info("Fetching database tables...");
+            $this->info("Fetching database tables and views...");
 
             $this->loadProjectEnv();
 
@@ -28,52 +29,22 @@ class DbList extends Command
                 return false;
             }
 
-            $tables = $this->fetchTableNames($pdo, $dbName);
-            if ($tables === false) {
-                $this->error("Failed to query database tables");
+            $relations = $this->fetchRelations($pdo, $dbName);
+            if ($relations === false) {
+                $this->error("Failed to query database tables/views");
                 return false;
             }
 
-            if ($tables === []) {
-                $this->info("No tables found in database '{$dbName}'");
+            if ($relations === []) {
+                $this->info("No tables or views found in database '{$dbName}'");
                 return false;
             }
 
-            return $this->displayTables($pdo, $dbName, $tables);
+            return $this->displayRelations($pdo, $dbName, $relations);
         } catch (\Exception $e) {
-            $this->error("Failed to list tables: " . $e->getMessage());
+            $this->error("Failed to list tables/views: " . $e->getMessage());
             return false;
         }
-    }
-
-    /**
-     * @return list<string>|false
-     */
-    protected function fetchTableNames(\PDO $pdo, string $dbName): array|false
-    {
-        $driver = $this->resolveDriver();
-
-        if ($driver === 'pgsql') {
-            $stmt = $pdo->query("SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema() AND table_type = 'BASE TABLE' ORDER BY table_name");
-        } elseif ($driver === 'sqlite') {
-            $stmt = $pdo->query("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name");
-        } else {
-            $stmt = $pdo->query("SHOW TABLES FROM `{$dbName}`");
-        }
-
-        if ($stmt === false) {
-            return false;
-        }
-
-        $tables = $stmt->fetchAll(\PDO::FETCH_COLUMN);
-        $names = [];
-        foreach ($tables as $table) {
-            if (is_string($table)) {
-                $names[] = $table;
-            }
-        }
-
-        return $names;
     }
 
     /**
@@ -153,35 +124,70 @@ class DbList extends Command
     }
 
     /**
-     * @param list<string> $tables
+     * @param list<array{name: string, kind: 'table'|'view'}> $relations
      */
-    protected function displayTables(\PDO $pdo, string $dbName, array $tables): bool
+    protected function displayRelations(\PDO $pdo, string $dbName, array $relations): bool
     {
-        $this->write("\nTables in database '{$dbName}':\n", CliColor::Yellow);
-
-        foreach ($tables as $table) {
-            $this->write("\nTable: {$table}\n", CliColor::Green);
-
-            $columns = $this->fetchColumns($pdo, $table);
-            if ($columns === false) {
-                $this->warning("Failed to get columns for table: {$table}");
-
-                return false;
+        $tables = [];
+        $views = [];
+        foreach ($relations as $rel) {
+            if ($rel['kind'] === 'view') {
+                $views[] = $rel['name'];
+            } else {
+                $tables[] = $rel['name'];
             }
+        }
 
-            if ($columns === []) {
-                $this->write("  No columns found\n", CliColor::Red);
+        $this->write("\nRelations in database '{$dbName}':\n", CliColor::Yellow);
 
-                return false;
+        if ($tables !== []) {
+            $this->write("\nTables:\n", CliColor::Yellow);
+            foreach ($tables as $table) {
+                if (!$this->displayOneRelation($pdo, $table, 'table')) {
+                    return false;
+                }
             }
+        }
 
-            $this->write("  Columns:\n", CliColor::Blue);
-            foreach ($columns as $column) {
-                $this->write($this->formatColumnLine($column) . "\n", CliColor::White);
+        if ($views !== []) {
+            $this->write("\nViews:\n", CliColor::Yellow);
+            foreach ($views as $view) {
+                if (!$this->displayOneRelation($pdo, $view, 'view')) {
+                    return false;
+                }
             }
         }
 
         $this->write("\n");
+
+        return true;
+    }
+
+    /**
+     * @param 'table'|'view' $kind
+     */
+    protected function displayOneRelation(\PDO $pdo, string $name, string $kind): bool
+    {
+        $label = $kind === 'view' ? 'View' : 'Table';
+        $this->write("\n{$label}: {$name}\n", CliColor::Green);
+
+        $columns = $this->fetchColumns($pdo, $name);
+        if ($columns === false) {
+            $this->warning("Failed to get columns for {$label}: {$name}");
+
+            return false;
+        }
+
+        if ($columns === []) {
+            $this->write("  No columns found\n", CliColor::Red);
+
+            return false;
+        }
+
+        $this->write("  Columns:\n", CliColor::Blue);
+        foreach ($columns as $column) {
+            $this->write($this->formatColumnLine($column) . "\n", CliColor::White);
+        }
 
         return true;
     }
